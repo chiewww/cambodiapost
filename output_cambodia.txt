@@ -1,5 +1,5 @@
 CAMBODIA POST INTERNATIONAL SHIPPING MONITOR
-Last checked: 2026-09-16 06:33:23 UTC
+Last checked: 2026-09-16 07:08:20 UTC
 Weight tested: 0.02 kg
 
 ============================================================
@@ -9,101 +9,101 @@ COUNTRY LIST (189 countries)
 2. អាហ្វហ្កានីស្ថាន — Afghanistan — SUSPENDED
 3. អង់ទីហ្គា និង បាប៊ុយដា — Antigua & Barbuda — SUSPENDED
 4. អាល់បានី — Albania — SUSPENDED
-5. អាមេនី — Armenia — SUSPENDED
-6. អង់ហ្គោឡា — Angola — SUSPENDED
-7. អាហ្សង់ទីន — Argentina — SUSPENDED
-8. អូទ្រីស — Austria — SUSPENDED
+5. អាមេនី — Armenia
+6. អង់ហ្គោឡា — Angola
+7. អាហ្សង់ទីន — Argentina
+8. អូទ្រីស — Austria
 9. អូស្ត្រាលី — Australia — SUSPENDED
 10. អាស៊ែបៃហ្សង់ — Azerbaijan — SUSPENDED
 11. បូស្ន៊ី និងហឺហ្ស៊ីហ្គូវីណា — Bosnia & Herzegovina — SUSPENDED
 12. បាបាដុស — Barbados — SUSPENDED
-13. បង់ក្លាដែស — Bangladesh — SUSPENDED
-14. បែលហ្ស៊ិក — Belgium — SUSPENDED
-15. បួគីណាហ្វាសូ — Burkina Faso — SUSPENDED
-16. ប៊ុលហ្ការី — Bulgaria — SUSPENDED
-17. បារ៉ែន — Bahrain — SUSPENDED
+13. បង់ក្លាដែស — Bangladesh
+14. បែលហ្ស៊ិក — Belgium
+15. បួគីណាហ្វាសូ — Burkina Faso
+16. ប៊ុលហ្ការី — Bulgaria
+17. បារ៉ែន — Bahrain
 18. ប៊ូរុនឌី — Burundi — SUSPENDED
 19. បេណាំង — Benin — SUSPENDED
-20. ព្រុយណេ — Brunei — SUSPENDED
-21. បូលីវី — Bolivia — SUSPENDED
-22. ប្រេស៊ីល — Brazil — SUSPENDED
+20. ព្រុយណេ — Brunei
+21. បូលីវី — Bolivia
+22. ប្រេស៊ីល — Brazil
 23. បាហាម៉ា — Bahamas — SUSPENDED
 24. ប៊ូតង់ — Bhutan — SUSPENDED
 25. បុតស្វាណា — Botswana — SUSPENDED
 26. បេឡារុស — Belarus — SUSPENDED
 27. បេលី — Belize — SUSPENDED
-28. កាណាដា — Canada — SUSPENDED
-29. សាធារណរដ្ឋអាហ្វ្រិកកណ្ដាល — Central African Republic — SUSPENDED
-30. កុងហ្គោ - ប្រាហ្សាវីល — Congo - Brazzaville — SUSPENDED
-31. ស្វ៊ីស — Switzerland — SUSPENDED
+28. កាណាដា — Canada
+29. សាធារណរដ្ឋអាហ្វ្រិកកណ្ដាល — Central African Republic
+30. កុងហ្គោ - ប្រាហ្សាវីល — Congo - Brazzaville
+31. ស្វ៊ីស — Switzerland
 32. ស៊ីលី — Chile — SUSPENDED
 33. កាមេរូន — Cameroon — SUSPENDED
-34. ចិន — China — SUSPENDED
-35. កូឡុំប៊ី — Colombia — SUSPENDED
-36. កូស្តារីកា — Costa Rica — SUSPENDED
-37. គុយបា — Cuba — SUSPENDED
+34. ចិន — China
+35. កូឡុំប៊ី — Colombia
+36. កូស្តារីកា — Costa Rica
+37. គុយបា — Cuba
 38. កាប់វែរ — Cape Verde — SUSPENDED
-39. ស៊ីប — Cyprus — SUSPENDED
-40. ឆែក — Czechia — SUSPENDED
-41. អាល្លឺម៉ង់ — Germany — SUSPENDED
-42. ជីប៊ូទី — Djibouti — SUSPENDED
-43. ដាណឺម៉ាក — Denmark — SUSPENDED
-44. ដូមីនីក — Dominica — SUSPENDED
+39. ស៊ីប — Cyprus
+40. ឆែក — Czechia
+41. អាល្លឺម៉ង់ — Germany
+42. ជីប៊ូទី — Djibouti
+43. ដាណឺម៉ាក — Denmark
+44. ដូមីនីក — Dominica
 45. សាធារណរដ្ឋ​ដូមីនីក — Dominican Republic — SUSPENDED
 46. អាល់ហ្សេរី — Algeria — SUSPENDED
 47. អេក្វាទ័រ — Ecuador — SUSPENDED
 48. អេស្តូនី — Estonia — SUSPENDED
-49. អេហ្ស៊ីប — Egypt — SUSPENDED
-50. អេរីត្រេ — Eritrea — SUSPENDED
-51. អេស្ប៉ាញ — Spain — SUSPENDED
-52. អេត្យូពី — Ethiopia — SUSPENDED
+49. អេហ្ស៊ីប — Egypt
+50. អេរីត្រេ — Eritrea
+51. អេស្ប៉ាញ — Spain
+52. អេត្យូពី — Ethiopia
 53. ហ្វាំងឡង់ — Finland — SUSPENDED
 54. ហ្វីជី — Fiji — SUSPENDED
-55. បារាំង — France — SUSPENDED
-56. ហ្គាបុង — Gabon — SUSPENDED
-57. ចក្រភព​អង់គ្លេស — United Kingdom — SUSPENDED
-58. ហ្គ្រើណាដ — Grenada — SUSPENDED
+55. បារាំង — France
+56. ហ្គាបុង — Gabon
+57. ចក្រភព​អង់គ្លេស — United Kingdom
+58. ហ្គ្រើណាដ — Grenada
 59. ហ្សកហ្ស៊ី — Georgia — SUSPENDED
-60. ហ្គាណា — Ghana — SUSPENDED
-61. ហ្គំប៊ី — Gambia — SUSPENDED
-62. ហ្គីណេ — Guinea — SUSPENDED
-63. ហ្គីណេអេក្វាទ័រ — Equatorial Guinea — SUSPENDED
+60. ហ្គាណា — Ghana
+61. ហ្គំប៊ី — Gambia
+62. ហ្គីណេ — Guinea
+63. ហ្គីណេអេក្វាទ័រ — Equatorial Guinea
 64. ក្រិក — Greece — SUSPENDED
 65. ក្វាតេម៉ាឡា — Guatemala — SUSPENDED
 66. ហ្គីណេប៊ីស្សូ — Guinea-Bissau — SUSPENDED
 67. ហ្គីយ៉ាន — Guyana — SUSPENDED
-68. ហុងកុង តំបន់រដ្ឋបាលពិសេសចិន — Hong Kong SAR China — SUSPENDED
-69. ហុងឌូរ៉ាស — Honduras — SUSPENDED
-70. ក្រូអាស៊ី — Croatia — SUSPENDED
-71. ហៃទី — Haiti — SUSPENDED
+68. ហុងកុង តំបន់រដ្ឋបាលពិសេសចិន — Hong Kong SAR China
+69. ហុងឌូរ៉ាស — Honduras
+70. ក្រូអាស៊ី — Croatia
+71. ហៃទី — Haiti
 72. ហុងគ្រី — Hungary — SUSPENDED
-73. ឥណ្ឌូណេស៊ី — Indonesia — SUSPENDED
-74. អៀរឡង់ — Ireland — SUSPENDED
-75. អ៊ីស្រាអែល — Israel — SUSPENDED
-76. ឥណ្ឌា — India — SUSPENDED
-77. អ៊ីរ៉ាក់ — Iraq — SUSPENDED
+73. ឥណ្ឌូណេស៊ី — Indonesia
+74. អៀរឡង់ — Ireland
+75. អ៊ីស្រាអែល — Israel
+76. ឥណ្ឌា — India
+77. អ៊ីរ៉ាក់ — Iraq
 78. អ៊ីរ៉ង់ — Iran — SUSPENDED
 79. អ៊ីស្លង់ — Iceland — SUSPENDED
-80. អ៊ីតាលី — Italy — SUSPENDED
-81. ហ្សាម៉ាអ៊ីក — Jamaica — SUSPENDED
-82. ហ៊្សកដានី — Jordan — SUSPENDED
-83. ជប៉ុន — Japan — SUSPENDED
+80. អ៊ីតាលី — Italy
+81. ហ្សាម៉ាអ៊ីក — Jamaica
+82. ហ៊្សកដានី — Jordan
+83. ជប៉ុន — Japan
 84. កេនយ៉ា — Kenya — SUSPENDED
 85. កៀហ្ស៊ីស៊ីស្ថាន — Kyrgyzstan — SUSPENDED
 86. គិរីបាទី — Kiribati — SUSPENDED
 87. កូម័រ — Comoros — SUSPENDED
 88. សាំង​គីត និង ណេវីស — St. Kitts & Nevis — SUSPENDED
-89. កូរ៉េ​ខាង​ត្បូង — South Korea — SUSPENDED
-90. កូវ៉ែត — Kuwait — SUSPENDED
-91. កាហ្សាក់ស្ថាន — Kazakhstan — SUSPENDED
-92. ឡាវ — Laos — SUSPENDED
+89. កូរ៉េ​ខាង​ត្បូង — South Korea
+90. កូវ៉ែត — Kuwait
+91. កាហ្សាក់ស្ថាន — Kazakhstan
+92. ឡាវ — Laos
 93. លីបង់ — Lebanon — SUSPENDED
 94. សាំងលូស៊ី — St. Lucia — SUSPENDED
 95. លិចតិនស្ដាញ — Liechtenstein — SUSPENDED
-96. ស្រីលង្កា — Sri Lanka — SUSPENDED
-97. លីបេរីយ៉ា — Liberia — SUSPENDED
-98. ឡេសូតូ — Lesotho — SUSPENDED
-99. លីទុយអានី — Lithuania — SUSPENDED
+96. ស្រីលង្កា — Sri Lanka
+97. លីបេរីយ៉ា — Liberia
+98. ឡេសូតូ — Lesotho
+99. លីទុយអានី — Lithuania
 100. លុចសំបួ — Luxembourg — SUSPENDED
 101. ឡេតូនី — Latvia — SUSPENDED
 102. លីប៊ី — Libya — SUSPENDED
@@ -113,47 +113,47 @@ COUNTRY LIST (189 countries)
 106. ម៉ាដាហ្គាស្កា — Madagascar — SUSPENDED
 107. ម៉ាសេដ្វានខាងជើង — North Macedonia — SUSPENDED
 108. ម៉ាលី — Mali — SUSPENDED
-109. មីយ៉ាន់ម៉ា (ភូមា) — Myanmar (Burma) — SUSPENDED
-110. ម៉ុងហ្គោលី — Mongolia — SUSPENDED
-111. ម៉ាកាវ តំបន់រដ្ឋបាលពិសេសចិន — Macao SAR China — SUSPENDED
-112. ម៉ូរីតានី — Mauritania — SUSPENDED
+109. មីយ៉ាន់ម៉ា (ភូមា) — Myanmar (Burma)
+110. ម៉ុងហ្គោលី — Mongolia
+111. ម៉ាកាវ តំបន់រដ្ឋបាលពិសេសចិន — Macao SAR China
+112. ម៉ូរីតានី — Mauritania
 113. ម៉ាល់ត៍ — Malta — SUSPENDED
 114. ម៉ូរីស — Mauritius — SUSPENDED
-115. ម៉ាល់ឌីវ — Maldives — SUSPENDED
-116. ម៉ាឡាវី — Malawi — SUSPENDED
-117. ម៉ិកស៊ិក — Mexico — SUSPENDED
-118. ម៉ាឡេស៊ី — Malaysia — SUSPENDED
+115. ម៉ាល់ឌីវ — Maldives
+116. ម៉ាឡាវី — Malawi
+117. ម៉ិកស៊ិក — Mexico
+118. ម៉ាឡេស៊ី — Malaysia
 119. ម៉ូសំប៊ិក — Mozambique — SUSPENDED
 120. ណាមីប៊ី — Namibia — SUSPENDED
 121. នូវែល​កាឡេដូនី — New Caledonia — SUSPENDED
 122. នីហ្សេ — Niger — SUSPENDED
-123. នីហ្សេរីយ៉ា — Nigeria — SUSPENDED
-124. នីការ៉ាហ្គា — Nicaragua — SUSPENDED
-125. ហូឡង់ — Netherlands — SUSPENDED
-126. ន័រវែស — Norway — SUSPENDED
+123. នីហ្សេរីយ៉ា — Nigeria
+124. នីការ៉ាហ្គា — Nicaragua
+125. ហូឡង់ — Netherlands
+126. ន័រវែស — Norway
 127. នេប៉ាល់ — Nepal — SUSPENDED
 128. ណូរូ — Nauru — SUSPENDED
-129. នូវែល​សេឡង់ — New Zealand — SUSPENDED
-130. អូម៉ង់ — Oman — SUSPENDED
-131. ប៉ាណាម៉ា — Panama — SUSPENDED
-132. ប៉េរូ — Peru — SUSPENDED
+129. នូវែល​សេឡង់ — New Zealand
+130. អូម៉ង់ — Oman
+131. ប៉ាណាម៉ា — Panama
+132. ប៉េរូ — Peru
 133. ប៉ាពូអាស៊ី​នូវែលហ្គីណេ — Papua New Guinea — SUSPENDED
-134. ហ្វ៊ីលីពីន — Philippines — SUSPENDED
-135. ប៉ាគីស្ថាន — Pakistan — SUSPENDED
-136. ប៉ូឡូញ — Poland — SUSPENDED
-137. ដែនដីប៉ាឡេស្ទីន — Palestinian Territories — SUSPENDED
-138. ព័រទុយហ្កាល់ — Portugal — SUSPENDED
-139. ប៉ារ៉ាហ្គាយ — Paraguay — SUSPENDED
+134. ហ្វ៊ីលីពីន — Philippines
+135. ប៉ាគីស្ថាន — Pakistan
+136. ប៉ូឡូញ — Poland
+137. ដែនដីប៉ាឡេស្ទីន — Palestinian Territories
+138. ព័រទុយហ្កាល់ — Portugal
+139. ប៉ារ៉ាហ្គាយ — Paraguay
 140. កាតា — Qatar — SUSPENDED
-141. រូម៉ានី — Romania — SUSPENDED
-142. រុស្ស៊ី — Russia — SUSPENDED
-143. រវ៉ាន់ដា — Rwanda — SUSPENDED
-144. អារ៉ាប៊ីសាអូឌីត — Saudi Arabia — SUSPENDED
+141. រូម៉ានី — Romania
+142. រុស្ស៊ី — Russia
+143. រវ៉ាន់ដា — Rwanda
+144. អារ៉ាប៊ីសាអូឌីត — Saudi Arabia
 145. កោះ​សូឡូម៉ុង — Solomon Islands — SUSPENDED
-146. សីស្ហែល — Seychelles — SUSPENDED
-147. ស៊ូដង់ — Sudan — SUSPENDED
-148. ស៊ុយអែត — Sweden — SUSPENDED
-149. សិង្ហបុរី — Singapore — SUSPENDED
+146. សីស្ហែល — Seychelles
+147. ស៊ូដង់ — Sudan
+148. ស៊ុយអែត — Sweden
+149. សិង្ហបុរី — Singapore
 150. ស្លូវេនី — Slovenia — SUSPENDED
 151. ស្លូវ៉ាគី — Slovakia — SUSPENDED
 152. សៀរ៉ាឡេអូន — Sierra Leone — SUSPENDED
@@ -167,223 +167,113 @@ COUNTRY LIST (189 countries)
 160. ស្វាស៊ីឡង់ — Eswatini — SUSPENDED
 161. ឆាដ — Chad — SUSPENDED
 162. តូហ្គោ — Togo — SUSPENDED
-163. ថៃ — Thailand — SUSPENDED
-164. តាហ្ស៊ីគីស្ថាន — Tajikistan — SUSPENDED
-165. តួកម៉េនីស្ថាន — Turkmenistan — SUSPENDED
-166. ទុយនីស៊ី — Tunisia — SUSPENDED
-167. តុងហ្គា — Tonga — SUSPENDED
-168. តួកគី — Türkiye — SUSPENDED
-169. ទ្រីនីដាត និង​តូបាហ្គោ — Trinidad & Tobago — SUSPENDED
-170. ទូវ៉ាលូ — Tuvalu — SUSPENDED
-171. តៃវ៉ាន់ — Taiwan — SUSPENDED
-172. តង់សានី — Tanzania — SUSPENDED
-173. អ៊ុយក្រែន — Ukraine — SUSPENDED
-174. អ៊ូហ្គង់ដា — Uganda — SUSPENDED
-175. សហរដ្ឋអាមេរិក — United States — SUSPENDED
-176. អ៊ុយរូហ្គាយ — Uruguay — SUSPENDED
-177. អ៊ូសបេគីស្ថាន — Uzbekistan — SUSPENDED
-178. បុរី​វ៉ាទីកង់ — Vatican City — SUSPENDED
-179. សាំង​វ៉ាំងសង់ និង ហ្គ្រេណាឌីន — St. Vincent & Grenadines — SUSPENDED
-180. វ៉េណេស៊ុយអេឡា — Venezuela — SUSPENDED
-181. វៀតណាម — Vietnam — SUSPENDED
-182. វ៉ានូទូ — Vanuatu — SUSPENDED
-183. សាម័រ — Samoa — SUSPENDED
-184. យេម៉ែន — Yemen — SUSPENDED
-185. អាហ្វ្រិកខាងត្បូង — South Africa — SUSPENDED
-186. សំប៊ី — Zambia — SUSPENDED
-187. ស៊ីមបាវ៉េ — Zimbabwe — SUSPENDED
-188. កូតឌីវ័រ — Côte d’Ivoire — SUSPENDED
-189. សែប៊ី — Serbia — SUSPENDED
-
-============================================================
-SUSPENDED DESTINATIONS (189)
-============================================================
-1. អេមីរ៉ាត​អារ៉ាប់​រួម — United Arab Emirates
-2. អាហ្វហ្កានីស្ថាន — Afghanistan
-3. អង់ទីហ្គា និង បាប៊ុយដា — Antigua & Barbuda
-4. អាល់បានី — Albania
-5. អាមេនី — Armenia
-6. អង់ហ្គោឡា — Angola
-7. អាហ្សង់ទីន — Argentina
-8. អូទ្រីស — Austria
-9. អូស្ត្រាលី — Australia
-10. អាស៊ែបៃហ្សង់ — Azerbaijan
-11. បូស្ន៊ី និងហឺហ្ស៊ីហ្គូវីណា — Bosnia & Herzegovina
-12. បាបាដុស — Barbados
-13. បង់ក្លាដែស — Bangladesh
-14. បែលហ្ស៊ិក — Belgium
-15. បួគីណាហ្វាសូ — Burkina Faso
-16. ប៊ុលហ្ការី — Bulgaria
-17. បារ៉ែន — Bahrain
-18. ប៊ូរុនឌី — Burundi
-19. បេណាំង — Benin
-20. ព្រុយណេ — Brunei
-21. បូលីវី — Bolivia
-22. ប្រេស៊ីល — Brazil
-23. បាហាម៉ា — Bahamas
-24. ប៊ូតង់ — Bhutan
-25. បុតស្វាណា — Botswana
-26. បេឡារុស — Belarus
-27. បេលី — Belize
-28. កាណាដា — Canada
-29. សាធារណរដ្ឋអាហ្វ្រិកកណ្ដាល — Central African Republic
-30. កុងហ្គោ - ប្រាហ្សាវីល — Congo - Brazzaville
-31. ស្វ៊ីស — Switzerland
-32. ស៊ីលី — Chile
-33. កាមេរូន — Cameroon
-34. ចិន — China
-35. កូឡុំប៊ី — Colombia
-36. កូស្តារីកា — Costa Rica
-37. គុយបា — Cuba
-38. កាប់វែរ — Cape Verde
-39. ស៊ីប — Cyprus
-40. ឆែក — Czechia
-41. អាល្លឺម៉ង់ — Germany
-42. ជីប៊ូទី — Djibouti
-43. ដាណឺម៉ាក — Denmark
-44. ដូមីនីក — Dominica
-45. សាធារណរដ្ឋ​ដូមីនីក — Dominican Republic
-46. អាល់ហ្សេរី — Algeria
-47. អេក្វាទ័រ — Ecuador
-48. អេស្តូនី — Estonia
-49. អេហ្ស៊ីប — Egypt
-50. អេរីត្រេ — Eritrea
-51. អេស្ប៉ាញ — Spain
-52. អេត្យូពី — Ethiopia
-53. ហ្វាំងឡង់ — Finland
-54. ហ្វីជី — Fiji
-55. បារាំង — France
-56. ហ្គាបុង — Gabon
-57. ចក្រភព​អង់គ្លេស — United Kingdom
-58. ហ្គ្រើណាដ — Grenada
-59. ហ្សកហ្ស៊ី — Georgia
-60. ហ្គាណា — Ghana
-61. ហ្គំប៊ី — Gambia
-62. ហ្គីណេ — Guinea
-63. ហ្គីណេអេក្វាទ័រ — Equatorial Guinea
-64. ក្រិក — Greece
-65. ក្វាតេម៉ាឡា — Guatemala
-66. ហ្គីណេប៊ីស្សូ — Guinea-Bissau
-67. ហ្គីយ៉ាន — Guyana
-68. ហុងកុង តំបន់រដ្ឋបាលពិសេសចិន — Hong Kong SAR China
-69. ហុងឌូរ៉ាស — Honduras
-70. ក្រូអាស៊ី — Croatia
-71. ហៃទី — Haiti
-72. ហុងគ្រី — Hungary
-73. ឥណ្ឌូណេស៊ី — Indonesia
-74. អៀរឡង់ — Ireland
-75. អ៊ីស្រាអែល — Israel
-76. ឥណ្ឌា — India
-77. អ៊ីរ៉ាក់ — Iraq
-78. អ៊ីរ៉ង់ — Iran
-79. អ៊ីស្លង់ — Iceland
-80. អ៊ីតាលី — Italy
-81. ហ្សាម៉ាអ៊ីក — Jamaica
-82. ហ៊្សកដានី — Jordan
-83. ជប៉ុន — Japan
-84. កេនយ៉ា — Kenya
-85. កៀហ្ស៊ីស៊ីស្ថាន — Kyrgyzstan
-86. គិរីបាទី — Kiribati
-87. កូម័រ — Comoros
-88. សាំង​គីត និង ណេវីស — St. Kitts & Nevis
-89. កូរ៉េ​ខាង​ត្បូង — South Korea
-90. កូវ៉ែត — Kuwait
-91. កាហ្សាក់ស្ថាន — Kazakhstan
-92. ឡាវ — Laos
-93. លីបង់ — Lebanon
-94. សាំងលូស៊ី — St. Lucia
-95. លិចតិនស្ដាញ — Liechtenstein
-96. ស្រីលង្កា — Sri Lanka
-97. លីបេរីយ៉ា — Liberia
-98. ឡេសូតូ — Lesotho
-99. លីទុយអានី — Lithuania
-100. លុចសំបួ — Luxembourg
-101. ឡេតូនី — Latvia
-102. លីប៊ី — Libya
-103. ម៉ារ៉ុក — Morocco
-104. ម៉ូណាកូ — Monaco
-105. ម៉ុលដាវី — Moldova
-106. ម៉ាដាហ្គាស្កា — Madagascar
-107. ម៉ាសេដ្វានខាងជើង — North Macedonia
-108. ម៉ាលី — Mali
-109. មីយ៉ាន់ម៉ា (ភូមា) — Myanmar (Burma)
-110. ម៉ុងហ្គោលី — Mongolia
-111. ម៉ាកាវ តំបន់រដ្ឋបាលពិសេសចិន — Macao SAR China
-112. ម៉ូរីតានី — Mauritania
-113. ម៉ាល់ត៍ — Malta
-114. ម៉ូរីស — Mauritius
-115. ម៉ាល់ឌីវ — Maldives
-116. ម៉ាឡាវី — Malawi
-117. ម៉ិកស៊ិក — Mexico
-118. ម៉ាឡេស៊ី — Malaysia
-119. ម៉ូសំប៊ិក — Mozambique
-120. ណាមីប៊ី — Namibia
-121. នូវែល​កាឡេដូនី — New Caledonia
-122. នីហ្សេ — Niger
-123. នីហ្សេរីយ៉ា — Nigeria
-124. នីការ៉ាហ្គា — Nicaragua
-125. ហូឡង់ — Netherlands
-126. ន័រវែស — Norway
-127. នេប៉ាល់ — Nepal
-128. ណូរូ — Nauru
-129. នូវែល​សេឡង់ — New Zealand
-130. អូម៉ង់ — Oman
-131. ប៉ាណាម៉ា — Panama
-132. ប៉េរូ — Peru
-133. ប៉ាពូអាស៊ី​នូវែលហ្គីណេ — Papua New Guinea
-134. ហ្វ៊ីលីពីន — Philippines
-135. ប៉ាគីស្ថាន — Pakistan
-136. ប៉ូឡូញ — Poland
-137. ដែនដីប៉ាឡេស្ទីន — Palestinian Territories
-138. ព័រទុយហ្កាល់ — Portugal
-139. ប៉ារ៉ាហ្គាយ — Paraguay
-140. កាតា — Qatar
-141. រូម៉ានី — Romania
-142. រុស្ស៊ី — Russia
-143. រវ៉ាន់ដា — Rwanda
-144. អារ៉ាប៊ីសាអូឌីត — Saudi Arabia
-145. កោះ​សូឡូម៉ុង — Solomon Islands
-146. សីស្ហែល — Seychelles
-147. ស៊ូដង់ — Sudan
-148. ស៊ុយអែត — Sweden
-149. សិង្ហបុរី — Singapore
-150. ស្លូវេនី — Slovenia
-151. ស្លូវ៉ាគី — Slovakia
-152. សៀរ៉ាឡេអូន — Sierra Leone
-153. សាន​ម៉ារីណូ — San Marino
-154. សេណេហ្គាល់ — Senegal
-155. សូម៉ាលី — Somalia
-156. សូរីណាម — Suriname
-157. សៅតូម៉េ និង ប្រាំងស៊ីប — São Tomé & Príncipe
-158. អែលសាល់វ៉ាឌ័រ — El Salvador
-159. ស៊ីរី — Syria
-160. ស្វាស៊ីឡង់ — Eswatini
-161. ឆាដ — Chad
-162. តូហ្គោ — Togo
 163. ថៃ — Thailand
 164. តាហ្ស៊ីគីស្ថាន — Tajikistan
 165. តួកម៉េនីស្ថាន — Turkmenistan
 166. ទុយនីស៊ី — Tunisia
-167. តុងហ្គា — Tonga
+167. តុងហ្គា — Tonga — SUSPENDED
 168. តួកគី — Türkiye
 169. ទ្រីនីដាត និង​តូបាហ្គោ — Trinidad & Tobago
 170. ទូវ៉ាលូ — Tuvalu
 171. តៃវ៉ាន់ — Taiwan
-172. តង់សានី — Tanzania
-173. អ៊ុយក្រែន — Ukraine
+172. តង់សានី — Tanzania — SUSPENDED
+173. អ៊ុយក្រែន — Ukraine — SUSPENDED
 174. អ៊ូហ្គង់ដា — Uganda
 175. សហរដ្ឋអាមេរិក — United States
 176. អ៊ុយរូហ្គាយ — Uruguay
 177. អ៊ូសបេគីស្ថាន — Uzbekistan
 178. បុរី​វ៉ាទីកង់ — Vatican City
-179. សាំង​វ៉ាំងសង់ និង ហ្គ្រេណាឌីន — St. Vincent & Grenadines
-180. វ៉េណេស៊ុយអេឡា — Venezuela
+179. សាំង​វ៉ាំងសង់ និង ហ្គ្រេណាឌីន — St. Vincent & Grenadines — SUSPENDED
+180. វ៉េណេស៊ុយអេឡា — Venezuela — SUSPENDED
 181. វៀតណាម — Vietnam
 182. វ៉ានូទូ — Vanuatu
 183. សាម័រ — Samoa
 184. យេម៉ែន — Yemen
-185. អាហ្វ្រិកខាងត្បូង — South Africa
+185. អាហ្វ្រិកខាងត្បូង — South Africa — SUSPENDED
 186. សំប៊ី — Zambia
 187. ស៊ីមបាវ៉េ — Zimbabwe
 188. កូតឌីវ័រ — Côte d’Ivoire
 189. សែប៊ី — Serbia
+
+============================================================
+SUSPENDED DESTINATIONS (79)
+============================================================
+1. អេមីរ៉ាត​អារ៉ាប់​រួម — United Arab Emirates
+2. អាហ្វហ្កានីស្ថាន — Afghanistan
+3. អង់ទីហ្គា និង បាប៊ុយដា — Antigua & Barbuda
+4. អាល់បានី — Albania
+5. អូស្ត្រាលី — Australia
+6. អាស៊ែបៃហ្សង់ — Azerbaijan
+7. បូស្ន៊ី និងហឺហ្ស៊ីហ្គូវីណា — Bosnia & Herzegovina
+8. បាបាដុស — Barbados
+9. ប៊ូរុនឌី — Burundi
+10. បេណាំង — Benin
+11. បាហាម៉ា — Bahamas
+12. ប៊ូតង់ — Bhutan
+13. បុតស្វាណា — Botswana
+14. បេឡារុស — Belarus
+15. បេលី — Belize
+16. ស៊ីលី — Chile
+17. កាមេរូន — Cameroon
+18. កាប់វែរ — Cape Verde
+19. សាធារណរដ្ឋ​ដូមីនីក — Dominican Republic
+20. អាល់ហ្សេរី — Algeria
+21. អេក្វាទ័រ — Ecuador
+22. អេស្តូនី — Estonia
+23. ហ្វាំងឡង់ — Finland
+24. ហ្វីជី — Fiji
+25. ហ្សកហ្ស៊ី — Georgia
+26. ក្រិក — Greece
+27. ក្វាតេម៉ាឡា — Guatemala
+28. ហ្គីណេប៊ីស្សូ — Guinea-Bissau
+29. ហ្គីយ៉ាន — Guyana
+30. ហុងគ្រី — Hungary
+31. អ៊ីរ៉ង់ — Iran
+32. អ៊ីស្លង់ — Iceland
+33. កេនយ៉ា — Kenya
+34. កៀហ្ស៊ីស៊ីស្ថាន — Kyrgyzstan
+35. គិរីបាទី — Kiribati
+36. កូម័រ — Comoros
+37. សាំង​គីត និង ណេវីស — St. Kitts & Nevis
+38. លីបង់ — Lebanon
+39. សាំងលូស៊ី — St. Lucia
+40. លិចតិនស្ដាញ — Liechtenstein
+41. លុចសំបួ — Luxembourg
+42. ឡេតូនី — Latvia
+43. លីប៊ី — Libya
+44. ម៉ារ៉ុក — Morocco
+45. ម៉ូណាកូ — Monaco
+46. ម៉ុលដាវី — Moldova
+47. ម៉ាដាហ្គាស្កា — Madagascar
+48. ម៉ាសេដ្វានខាងជើង — North Macedonia
+49. ម៉ាលី — Mali
+50. ម៉ាល់ត៍ — Malta
+51. ម៉ូរីស — Mauritius
+52. ម៉ូសំប៊ិក — Mozambique
+53. ណាមីប៊ី — Namibia
+54. នូវែល​កាឡេដូនី — New Caledonia
+55. នីហ្សេ — Niger
+56. នេប៉ាល់ — Nepal
+57. ណូរូ — Nauru
+58. ប៉ាពូអាស៊ី​នូវែលហ្គីណេ — Papua New Guinea
+59. កាតា — Qatar
+60. កោះ​សូឡូម៉ុង — Solomon Islands
+61. ស្លូវេនី — Slovenia
+62. ស្លូវ៉ាគី — Slovakia
+63. សៀរ៉ាឡេអូន — Sierra Leone
+64. សាន​ម៉ារីណូ — San Marino
+65. សេណេហ្គាល់ — Senegal
+66. សូម៉ាលី — Somalia
+67. សូរីណាម — Suriname
+68. សៅតូម៉េ និង ប្រាំងស៊ីប — São Tomé & Príncipe
+69. អែលសាល់វ៉ាឌ័រ — El Salvador
+70. ស៊ីរី — Syria
+71. ស្វាស៊ីឡង់ — Eswatini
+72. ឆាដ — Chad
+73. តូហ្គោ — Togo
+74. តុងហ្គា — Tonga
+75. តង់សានី — Tanzania
+76. អ៊ុយក្រែន — Ukraine
+77. សាំង​វ៉ាំងសង់ និង ហ្គ្រេណាឌីន — St. Vincent & Grenadines
+78. វ៉េណេស៊ុយអេឡា — Venezuela
+79. អាហ្វ្រិកខាងត្បូង — South Africa

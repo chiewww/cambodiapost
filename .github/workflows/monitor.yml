@@ -1,0 +1,65 @@
+name: Monitor Cambodia Post
+
+on:
+  schedule:
+    # Runs every day at 08:00 UTC.
+    #
+    # Change this if you want a different time.
+    - cron: "0 8 * * *"
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: |
+          python -m playwright install --with-deps chromium
+
+      - name: Run Cambodia Post monitor
+        run: |
+          python monitor_combodia.py
+
+      - name: Show generated output
+        run: |
+          echo "========================================"
+          echo "Generated output_cambodia.txt"
+          echo "========================================"
+          cat output_cambodia.txt
+
+      - name: Commit changed output file
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add output_cambodia.txt
+
+          if git diff --cached --quiet; then
+            echo "No change to output_cambodia.txt"
+          else
+            git commit -m "Update Cambodia Post monitoring output"
+            git push
+          fi

@@ -1,314 +1,365 @@
+import json
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
-from babel import Locale
 from playwright.sync_api import (
+    Browser,
+    BrowserContext,
+    Page,
+    Response,
     TimeoutError as PlaywrightTimeoutError,
     sync_playwright,
 )
 
 
-# ============================================================================
+# ============================================================
 # CONFIGURATION
-# ============================================================================
+# ============================================================
 
 URL = "https://www.cambodiapost.com.kh/calculate/international"
 
 OUTPUT_FILE = Path("output_cambodia.txt")
+
+DEBUG_HTML = Path("debug_cambodiapost.html")
+DEBUG_PNG = Path("debug_cambodiapost.png")
+DEBUG_NETWORK = Path("debug_cambodiapost_network.txt")
+DEBUG_DATA = Path("debug_cambodiapost_data.json")
 
 WEIGHT = "0.02"
 
 PAGE_TIMEOUT = 60_000
 RESULT_TIMEOUT = 30_000
 
-COUNTRY_SEARCH_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-DEBUG_HTML = Path("debug_cambodiapost.html")
-DEBUG_PNG = Path("debug_cambodiapost.png")
+COUNTRY_DISCOVERY_TIMEOUT = 45_000
 
 
-# ============================================================================
-# COUNTRY NAME TRANSLATION
-# ============================================================================
+# ============================================================
+# KHMER -> ENGLISH COUNTRY NAMES
+# ============================================================
 
-EN_LOCALE = Locale("en")
-KM_LOCALE = Locale("km")
-
-EN_TERRITORIES = dict(EN_LOCALE.territories)
-KM_TERRITORIES = dict(KM_LOCALE.territories)
-
-
-def normalize_name(value: str) -> str:
-    """
-    Clean whitespace and invisible characters.
-    """
-    if not value:
-        return ""
-
-    value = value.replace("\u200b", "")
-    value = value.replace("\xa0", " ")
-    value = re.sub(r"\s+", " ", value)
-
-    return value.strip()
-
-
-def normalize_for_lookup(value: str) -> str:
-    """
-    Normalize a country name for comparison.
-    """
-    value = normalize_name(value)
-
-    value = re.sub(
-        r"\s*[\(\[\{]\s*[A-Za-z]{2,3}\s*[\)\]\}]\s*$",
-        "",
-        value,
-    )
-
-    return value.casefold().strip()
-
-
-def build_country_name_maps():
-    """
-    Build Khmer -> English and English -> English country mappings
-    using Babel's localized territory data.
-    """
-    khmer_to_english = {}
-    english_to_english = {}
-
-    for code, english_name in EN_TERRITORIES.items():
-        if not code or not english_name:
-            continue
-
-        english_name = normalize_name(english_name)
-
-        khmer_name = KM_TERRITORIES.get(code)
-
-        if khmer_name:
-            khmer_to_english[
-                normalize_for_lookup(khmer_name)
-            ] = english_name
-
-        english_to_english[
-            normalize_for_lookup(english_name)
-        ] = english_name
-
-    return khmer_to_english, english_to_english
-
-
-KHMER_TO_ENGLISH, ENGLISH_TO_ENGLISH = build_country_name_maps()
-
-
-def english_from_code(code: str) -> str:
-    """
-    Convert an ISO alpha-2 country code into its English name.
-    """
-    if not code:
-        return ""
-
-    return normalize_name(
-        EN_TERRITORIES.get(code.upper(), "")
-    )
-
-
-def find_iso_code_in_value(value: str) -> str:
-    """
-    Try to find an ISO alpha-2 country code in an option value.
-
-    Examples:
-        US
-        KH
-        country-US
-        country_US
-        /country/US
-    """
-    if not value:
-        return ""
-
-    value = normalize_name(value)
-
-    # Direct two-letter ISO code.
-    if re.fullmatch(r"[A-Za-z]{2}", value):
-        code = value.upper()
-
-        if code in EN_TERRITORIES:
-            return code
-
-    # Look for a two-letter code inside the value.
-    matches = re.findall(
-        r"(?<![A-Za-z])([A-Za-z]{2})(?![A-Za-z])",
-        value,
-    )
-
-    for match in matches:
-        code = match.upper()
-
-        if code in EN_TERRITORIES:
-            return code
-
-    return ""
+COUNTRY_TRANSLATIONS = {
+    "អាល់ហ្សេរី": "Algeria",
+    "អង់ហ្គោឡា": "Angola",
+    "អាហ្សង់ទីន": "Argentina",
+    "អាមេនី": "Armenia",
+    "អូស្ត្រាលី": "Australia",
+    "អូទ្រីស": "Austria",
+    "អាស៊ែបៃហ្សង់": "Azerbaijan",
+    "បង់ក្លាដែស": "Bangladesh",
+    "បែលហ្សិក": "Belgium",
+    "ប្រេស៊ីល": "Brazil",
+    "ប្រ៊ុយណេ": "Brunei",
+    "ប៊ុលហ្គារី": "Bulgaria",
+    "កាណាដា": "Canada",
+    "ឈីលី": "Chile",
+    "ចិន": "China",
+    "កូឡុំប៊ី": "Colombia",
+    "កូតឌីវ័រ": "Cote d'Ivoire",
+    "ក្រូអាត": "Croatia",
+    "ស៊ីប": "Cyprus",
+    "សាធារណរដ្ឋឆែក": "Czech Republic",
+    "ឆែក": "Czech Republic",
+    "ដាណឺម៉ាក": "Denmark",
+    "ជីប៊ូទី": "Djibouti",
+    "អេក្វាឌ័រ": "Ecuador",
+    "អេហ្ស៊ីប": "Egypt",
+    "អេស្តូនី": "Estonia",
+    "អេត្យូពី": "Ethiopia",
+    "ហ្វាំងឡង់": "Finland",
+    "បារាំង": "France",
+    "ហ្សកហ្ស៊ី": "Georgia",
+    "អាល្លឺម៉ង់": "Germany",
+    "ក្រិក": "Greece",
+    "ហុងគ្រី": "Hungary",
+    "ឥណ្ឌា": "India",
+    "ឥណ្ឌូនេស៊ី": "Indonesia",
+    "អ៊ីរ៉ង់": "Iran",
+    "អ៊ីរ៉ាក់": "Iraq",
+    "អៀរឡង់": "Ireland",
+    "អ៊ីស្រាអែល": "Israel",
+    "អ៊ីតាលី": "Italy",
+    "ជប៉ុន": "Japan",
+    "ហ្សកដានី": "Jordan",
+    "កាហ្សាក់ស្ថាន": "Kazakhstan",
+    "កេនយ៉ា": "Kenya",
+    "កូរ៉េ": "South Korea",
+    "កូរ៉េខាងត្បូង": "South Korea",
+    "គុយវ៉ែត": "Kuwait",
+    "ឡាវ": "Laos",
+    "ឡាតវី": "Latvia",
+    "លីបង់": "Lebanon",
+    "លីទុយអានី": "Lithuania",
+    "លុចសំបួ": "Luxembourg",
+    "ម៉ាឡេស៊ី": "Malaysia",
+    "ម៉ាល់ឌីវ": "Maldives",
+    "ម៉ាល់តា": "Malta",
+    "ម៉ិកស៊ិក": "Mexico",
+    "ម៉ុងហ្គោលី": "Mongolia",
+    "ម៉ារ៉ុក": "Morocco",
+    "មីយ៉ាន់ម៉ា": "Myanmar",
+    "នេប៉ាល់": "Nepal",
+    "ហូឡង់": "Netherlands",
+    "នូវែលសេឡង់": "New Zealand",
+    "នីហ្សេរីយ៉ា": "Nigeria",
+    "ន័រវែស": "Norway",
+    "អូម៉ង់": "Oman",
+    "ប៉ាគីស្ថាន": "Pakistan",
+    "ប៉េរូ": "Peru",
+    "ហ្វីលីពីន": "Philippines",
+    "ប៉ូឡូញ": "Poland",
+    "ព័រទុយហ្គាល់": "Portugal",
+    "កាតា": "Qatar",
+    "រូម៉ានី": "Romania",
+    "រុស្ស៊ី": "Russia",
+    "អារ៉ាប៊ីសាអូឌីត": "Saudi Arabia",
+    "ស៊ែប៊ី": "Serbia",
+    "សិង្ហបុរី": "Singapore",
+    "ស្លូវ៉ាគី": "Slovakia",
+    "ស្លូវេនី": "Slovenia",
+    "អាហ្វ្រិកខាងត្បូង": "South Africa",
+    "អេស្ប៉ាញ": "Spain",
+    "ស្រីលង្កា": "Sri Lanka",
+    "ស៊ូដង់": "Sudan",
+    "ស៊ុយអែត": "Sweden",
+    "ស្វីស": "Switzerland",
+    "ស៊ីរី": "Syria",
+    "តៃវ៉ាន់": "Taiwan",
+    "តង់ហ្សានី": "Tanzania",
+    "ថៃ": "Thailand",
+    "ទុយនេស៊ី": "Tunisia",
+    "តួកគី": "Turkey",
+    "អ៊ុយក្រែន": "Ukraine",
+    "អេមីរ៉ាតអារ៉ាប់រួម": "United Arab Emirates",
+    "អង់គ្លេស": "United Kingdom",
+    "ចក្រភពអង់គ្លេស": "United Kingdom",
+    "សហរដ្ឋអាមេរិក": "United States",
+    "អាមេរិក": "United States",
+    "អ៊ុយរូហ្គាយ": "Uruguay",
+    "អ៊ូសបេគីស្ថាន": "Uzbekistan",
+    "វៀតណាម": "Vietnam",
+    "យេម៉ែន": "Yemen",
+    "សំប៊ី": "Zambia",
+    "ហ្ស៊ីមបាវ៉េ": "Zimbabwe",
+}
 
 
-def english_country_name(
-    cambodian_name: str,
-    value: str = "",
-) -> str:
-    """
-    Determine the English country name.
-
-    Priority:
-      1. ISO country code from option value.
-      2. Khmer country name.
-      3. Existing English country name.
-      4. Latin/English fallback.
-    """
-    original = normalize_name(cambodian_name)
-
-    # ------------------------------------------------------------
-    # Try the option value.
-    # ------------------------------------------------------------
-    code = find_iso_code_in_value(value)
-
-    if code:
-        english = english_from_code(code)
-
-        if english:
-            return english
-
-    # ------------------------------------------------------------
-    # Try exact Khmer name.
-    # ------------------------------------------------------------
-    lookup = normalize_for_lookup(original)
-
-    if lookup in KHMER_TO_ENGLISH:
-        return KHMER_TO_ENGLISH[lookup]
-
-    # ------------------------------------------------------------
-    # Already English.
-    # ------------------------------------------------------------
-    if lookup in ENGLISH_TO_ENGLISH:
-        return ENGLISH_TO_ENGLISH[lookup]
-
-    # ------------------------------------------------------------
-    # If the website already supplied Latin characters,
-    # preserve them as the English name.
-    # ------------------------------------------------------------
-    if re.search(r"[A-Za-z]", original):
-        return original
-
-    # ------------------------------------------------------------
-    # If no translation was found, clearly indicate that rather
-    # than incorrectly treating the Khmer name as English.
-    # ------------------------------------------------------------
-    return "[English translation not found]"
-
-
-# ============================================================================
-# COUNTRY DATA
-# ============================================================================
+# ============================================================
+# DATA STRUCTURES
+# ============================================================
 
 @dataclass
 class Country:
-    """
-    Stores the exact country name shown by Cambodia Post,
-    its English translation, and the option value if available.
-    """
-
     website_name: str
     english_name: str
     value: str = ""
 
     @property
-    def output_name(self) -> str:
-        return f"{self.website_name} — {self.english_name}"
+    def display_name(self) -> str:
+        if self.english_name and self.english_name != self.website_name:
+            return f"{self.website_name} — {self.english_name}"
+
+        return self.website_name
 
 
-# ============================================================================
-# PLACEHOLDER DETECTION
-# ============================================================================
+# ============================================================
+# GENERAL HELPERS
+# ============================================================
 
-def is_country_placeholder(text: str) -> bool:
-    """
-    Return True if text is a country-field placeholder rather than
-    an actual country.
+def clean_text(value: Any) -> str:
+    if value is None:
+        return ""
 
-    Important:
-        ជ្រើសរើសប្រទេស = Select a country
-    """
-    if not text:
+    text = str(value)
+
+    text = text.replace("\xa0", " ")
+    text = re.sub(r"\s+", " ", text)
+
+    return text.strip()
+
+
+def is_placeholder(text: str) -> bool:
+    value = clean_text(text).lower()
+
+    if not value:
         return True
 
-    normalized = normalize_for_lookup(text)
-
-    placeholder_values = {
-        "country",
+    placeholders = {
         "select",
-        "select country",
-        "choose country",
-        "please select",
-        "please select country",
+        "choose",
+        "country",
         "ជ្រើសរើសប្រទេស",
         "ជ្រើសរើស",
-        "ប្រទេស",
+        "select country",
+        "please select",
+        "-- select --",
+        "---",
     }
 
-    if normalized in {
-        normalize_for_lookup(value)
-        for value in placeholder_values
-    }:
+    if value in placeholders:
         return True
 
-    # Additional Khmer placeholder checks.
-    if "ជ្រើសរើសប្រទេស" in text:
-        return True
-
-    if "ជ្រើសរើស" in text and "ប្រទេស" in text:
-        return True
-
-    if "select country" in normalized:
-        return True
-
-    if "choose country" in normalized:
+    if "ជ្រើសរើសប្រទេស" in value:
         return True
 
     return False
 
 
-# ============================================================================
-# GENERAL HELPERS
-# ============================================================================
+def translate_country(name: str) -> str:
+    name = clean_text(name)
 
-def clean_text(value: str) -> str:
-    if not value:
+    if not name:
         return ""
 
-    value = value.replace("\xa0", " ")
-    value = re.sub(r"\s+", " ", value)
+    if name in COUNTRY_TRANSLATIONS:
+        return COUNTRY_TRANSLATIONS[name]
 
-    return value.strip()
+    # Sometimes the site contains punctuation around the name.
+    simplified = re.sub(r"[៖:,，。.\-]+$", "", name).strip()
+
+    if simplified in COUNTRY_TRANSLATIONS:
+        return COUNTRY_TRANSLATIONS[simplified]
+
+    # If the site already gives English, keep it.
+    if re.fullmatch(r"[A-Za-z][A-Za-z .,'()&\-]+", name):
+        return name
+
+    return name
 
 
-def visible(locator) -> bool:
-    try:
-        return locator.is_visible()
-    except Exception:
-        return False
+def normalize_country_key(name: str) -> str:
+    return re.sub(r"\s+", " ", clean_text(name)).casefold()
 
 
-def get_body_text(page) -> str:
-    try:
-        return clean_text(
-            page.locator("body").inner_text()
+# ============================================================
+# NETWORK CAPTURE
+# ============================================================
+
+class NetworkCapture:
+    def __init__(self) -> None:
+        self.records: list[dict[str, Any]] = []
+        self.responses: list[dict[str, Any]] = []
+
+    def on_request(self, request) -> None:
+        try:
+            resource_type = request.resource_type
+
+            if resource_type not in {
+                "xhr",
+                "fetch",
+                "document",
+                "script",
+            }:
+                return
+
+            url = request.url
+
+            self.records.append(
+                {
+                    "type": "request",
+                    "resource_type": resource_type,
+                    "method": request.method,
+                    "url": url,
+                }
+            )
+        except Exception:
+            pass
+
+    def on_response(self, response: Response) -> None:
+        try:
+            request = response.request
+            resource_type = request.resource_type
+            url = response.url
+
+            if resource_type not in {"xhr", "fetch"}:
+                return
+
+            record = {
+                "type": "response",
+                "resource_type": resource_type,
+                "status": response.status,
+                "url": url,
+                "content_type": response.headers.get("content-type", ""),
+            }
+
+            interesting = any(
+                word in url.lower()
+                for word in [
+                    "country",
+                    "countries",
+                    "destination",
+                    "calculate",
+                    "international",
+                    "price",
+                    "service",
+                ]
+            )
+
+            if interesting or response.status >= 400:
+                try:
+                    text = response.text()
+
+                    if len(text) > 500_000:
+                        text = text[:500_000]
+
+                    record["body"] = text
+                except Exception as exc:
+                    record["body_error"] = str(exc)
+
+            self.responses.append(record)
+
+        except Exception:
+            pass
+
+    def save(self) -> None:
+        combined = {
+            "requests": self.records,
+            "responses": self.responses,
+        }
+
+        DEBUG_NETWORK.write_text(
+            json.dumps(
+                combined,
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
         )
-    except Exception:
-        return ""
 
 
-def save_diagnostics(page):
-    """
-    Save HTML and screenshot for GitHub Actions debugging.
-    """
+# ============================================================
+# JAVASCRIPT DIAGNOSTICS
+# ============================================================
+
+def attach_console_diagnostics(page: Page) -> None:
+    def on_console(message) -> None:
+        try:
+            if message.type in {"error", "warning"}:
+                print(
+                    f"[Browser {message.type.upper()}] "
+                    f"{message.text}"
+                )
+        except Exception:
+            pass
+
+    def on_page_error(error) -> None:
+        try:
+            print(f"[Browser PAGE ERROR] {error}")
+        except Exception:
+            pass
+
+    page.on("console", on_console)
+    page.on("pageerror", on_page_error)
+
+
+# ============================================================
+# SAVE DEBUG INFORMATION
+# ============================================================
+
+def save_debug(page: Page, network: NetworkCapture | None = None) -> None:
     try:
         DEBUG_HTML.write_text(
             page.content(),
@@ -325,623 +376,1079 @@ def save_diagnostics(page):
     except Exception:
         pass
 
-
-# ============================================================================
-# FIND COUNTRY FIELD
-# ============================================================================
-
-def find_country_select(page):
-    """
-    Find a native HTML <select> country field.
-    """
-    selects = page.locator("select:visible")
-
-    try:
-        count = selects.count()
-    except Exception:
-        count = 0
-
-    candidates = []
-
-    for i in range(count):
-        select = selects.nth(i)
-
+    if network is not None:
         try:
-            attrs = select.evaluate(
-                """
-                el => ({
-                    id: el.id || "",
-                    name: el.name || "",
-                    aria: el.getAttribute("aria-label") || "",
-                    title: el.getAttribute("title") || "",
-                    placeholder: el.getAttribute("placeholder") || "",
-                    text: el.parentElement
-                        ? el.parentElement.innerText
-                        : ""
-                })
-                """
-            )
-        except Exception:
-            attrs = {}
-
-        combined = " ".join(
-            str(attrs.get(key, ""))
-            for key in [
-                "id",
-                "name",
-                "aria",
-                "title",
-                "placeholder",
-                "text",
-            ]
-        ).casefold()
-
-        if (
-            "country" in combined
-            or "ប្រទេស" in combined
-        ):
-            candidates.append(select)
-
-    if candidates:
-        return candidates[0]
-
-    # If there is only one visible select, use it.
-    if count == 1:
-        return selects.nth(0)
-
-    return None
-
-
-def find_country_combobox(page):
-    """
-    Find a custom autocomplete/combobox country field.
-    """
-    selectors = [
-        '[role="combobox"]:visible',
-        'input[placeholder*="country" i]:visible',
-        'input[aria-label*="country" i]:visible',
-        'input[name*="country" i]:visible',
-        'input[id*="country" i]:visible',
-        'input[formcontrolname*="country" i]:visible',
-
-        'input[placeholder*="ប្រទេស" i]:visible',
-        'input[aria-label*="ប្រទេស" i]:visible',
-        'input[name*="ប្រទេស" i]:visible',
-        'input[id*="ប្រទេស" i]:visible',
-    ]
-
-    for selector in selectors:
-        locator = page.locator(selector)
-
-        try:
-            count = locator.count()
-        except Exception:
-            count = 0
-
-        for i in range(count):
-            candidate = locator.nth(i)
-
-            if visible(candidate):
-                return candidate
-
-    # Broader fallback.
-    inputs = page.locator("input:visible")
-
-    try:
-        count = inputs.count()
-    except Exception:
-        count = 0
-
-    for i in range(count):
-        candidate = inputs.nth(i)
-
-        try:
-            attrs = candidate.evaluate(
-                """
-                el => ({
-                    id: el.id || "",
-                    name: el.name || "",
-                    placeholder:
-                        el.getAttribute("placeholder") || "",
-                    aria:
-                        el.getAttribute("aria-label") || "",
-                    parentText:
-                        el.parentElement
-                            ? el.parentElement.innerText
-                            : ""
-                })
-                """
-            )
-        except Exception:
-            attrs = {}
-
-        combined = " ".join(
-            str(attrs.get(key, ""))
-            for key in [
-                "id",
-                "name",
-                "placeholder",
-                "aria",
-                "parentText",
-            ]
-        ).casefold()
-
-        if (
-            "country" in combined
-            or "ប្រទេស" in combined
-        ):
-            return candidate
-
-    return None
-
-
-def find_country_control(page):
-    """
-    Return:
-        ("select", locator)
-    or:
-        ("combobox", locator)
-    """
-    select = find_country_select(page)
-
-    if select is not None:
-        return "select", select
-
-    combobox = find_country_combobox(page)
-
-    if combobox is not None:
-        return "combobox", combobox
-
-    save_diagnostics(page)
-
-    raise RuntimeError(
-        "Could not find the Country input field."
-    )
-
-
-# ============================================================================
-# NATIVE SELECT COUNTRY DISCOVERY
-# ============================================================================
-
-def countries_from_native_select(select):
-    """
-    Read all real country options from a native <select>.
-
-    The placeholder ជ្រើសរើសប្រទេស is explicitly excluded.
-    """
-    countries = []
-
-    options = select.locator("option")
-
-    try:
-        count = options.count()
-    except Exception:
-        count = 0
-
-    seen = set()
-
-    for i in range(count):
-        option = options.nth(i)
-
-        try:
-            text = clean_text(option.inner_text())
-        except Exception:
-            text = ""
-
-        try:
-            value = clean_text(
-                option.get_attribute("value") or ""
-            )
-        except Exception:
-            value = ""
-
-        # ------------------------------------------------------------
-        # IMPORTANT:
-        # Ignore the "Select a country" placeholder.
-        # ------------------------------------------------------------
-        if is_country_placeholder(text):
-            continue
-
-        if not text:
-            continue
-
-        # Ignore disabled placeholders.
-        try:
-            if option.is_disabled():
-                continue
+            network.save()
         except Exception:
             pass
 
-        key = normalize_for_lookup(text)
 
-        if not key:
-            continue
+# ============================================================
+# COUNTRY EXTRACTION FROM JSON
+# ============================================================
 
-        if key in seen:
-            continue
+COUNTRY_NAME_KEYS = {
+    "country",
+    "countryname",
+    "country_name",
+    "name",
+    "displayname",
+    "display_name",
+    "title",
+    "label",
+    "description",
+    "khmername",
+    "khmer_name",
+    "namekh",
+    "name_kh",
+    "nameen",
+    "name_en",
+    "englishname",
+    "english_name",
+}
 
-        seen.add(key)
+VALUE_KEYS = {
+    "id",
+    "value",
+    "code",
+    "countrycode",
+    "country_code",
+    "iso",
+    "iso2",
+    "iso_code",
+}
 
-        english_name = english_country_name(
+
+def looks_like_country_name(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+
+    text = clean_text(value)
+
+    if not text:
+        return False
+
+    if len(text) > 100:
+        return False
+
+    if is_placeholder(text):
+        return False
+
+    # Khmer text or ordinary English country-like text.
+    has_khmer = bool(
+        re.search(
+            r"[\u1780-\u17ff]",
             text,
-            value,
         )
+    )
 
-        countries.append(
-            Country(
-                website_name=text,
-                english_name=english_name,
-                value=value,
-            )
+    has_latin = bool(
+        re.search(
+            r"[A-Za-z]",
+            text,
         )
+    )
 
-    return countries
+    return has_khmer or has_latin
 
 
-# ============================================================================
-# CUSTOM DROPDOWN OPTION DISCOVERY
-# ============================================================================
+def object_to_country(obj: dict[str, Any]) -> Country | None:
+    normalized = {
+        str(key).strip().lower().replace("-", "_"): value
+        for key, value in obj.items()
+    }
 
-def get_visible_options(page):
-    """
-    Find visible options from common autocomplete/dropdown implementations.
-    """
-    selectors = [
-        '[role="option"]:visible',
-        'li[role="option"]:visible',
-        'mat-option:visible',
-        '.dropdown-item:visible',
-        '.select-option:visible',
-        '.option:visible',
+    name_candidates: list[str] = []
+
+    for key, value in normalized.items():
+        compact = key.replace("_", "")
+
+        if (
+            key in COUNTRY_NAME_KEYS
+            or compact in {
+                "countryname",
+                "displayname",
+                "khmername",
+                "englishname",
+            }
+        ):
+            if looks_like_country_name(value):
+                name_candidates.append(clean_text(value))
+
+    if not name_candidates:
+        return None
+
+    # Prefer Khmer as website display name when present.
+    khmer_names = [
+        name
+        for name in name_candidates
+        if re.search(r"[\u1780-\u17ff]", name)
     ]
 
-    results = []
+    english_names = [
+        name
+        for name in name_candidates
+        if re.fullmatch(
+            r"[A-Za-z][A-Za-z .,'()&\-]+",
+            name,
+        )
+    ]
 
-    for selector in selectors:
-        locator = page.locator(selector)
+    website_name = (
+        khmer_names[0]
+        if khmer_names
+        else name_candidates[0]
+    )
 
-        try:
-            count = locator.count()
-        except Exception:
-            count = 0
+    english_name = (
+        english_names[0]
+        if english_names
+        else translate_country(website_name)
+    )
 
-        for i in range(count):
-            item = locator.nth(i)
+    value = ""
 
-            if not visible(item):
-                continue
+    for key, candidate in normalized.items():
+        if (
+            key in VALUE_KEYS
+            or key.replace("_", "") in {
+                "countrycode",
+                "isocode",
+            }
+        ):
+            if candidate is not None:
+                value = clean_text(candidate)
+                break
 
-            try:
-                text = clean_text(
-                    item.inner_text()
-                )
-            except Exception:
-                text = ""
-
-            # --------------------------------------------------------
-            # IMPORTANT:
-            # Never return "Select a country" as an option.
-            # --------------------------------------------------------
-            if is_country_placeholder(text):
-                continue
-
-            if text:
-                results.append(text)
-
-    # Deduplicate while preserving order.
-    unique = []
-    seen = set()
-
-    for text in results:
-        key = normalize_for_lookup(text)
-
-        if not key:
-            continue
-
-        if is_country_placeholder(text):
-            continue
-
-        if key in seen:
-            continue
-
-        seen.add(key)
-        unique.append(text)
-
-    return unique
+    return Country(
+        website_name=website_name,
+        english_name=english_name,
+        value=value,
+    )
 
 
-def discover_countries_from_combobox(
-    page,
-    combobox,
-):
-    """
-    Discover all countries from a custom country autocomplete.
+def recursively_find_country_objects(
+    value: Any,
+    results: list[Country],
+) -> None:
+    if isinstance(value, dict):
+        country = object_to_country(value)
 
-    Cambodia Post may show an empty dropdown until a letter is typed.
-    Therefore we search A-Z.
-    """
-    discovered = {}
+        if country is not None:
+            results.append(country)
 
-    for letter in COUNTRY_SEARCH_LETTERS:
-        try:
-            combobox.click()
-
-            # Clear previous search.
-            try:
-                combobox.fill("")
-            except Exception:
-                combobox.press("Control+A")
-                combobox.press("Backspace")
-
-            combobox.fill(letter)
-
-            page.wait_for_timeout(500)
-
-            options = get_visible_options(page)
-
-            for option_text in options:
-                if is_country_placeholder(option_text):
-                    continue
-
-                key = normalize_for_lookup(option_text)
-
-                if not key:
-                    continue
-
-                if key not in discovered:
-                    discovered[key] = Country(
-                        website_name=option_text,
-                        english_name=english_country_name(
-                            option_text
-                        ),
-                        value="",
-                    )
-
-        except Exception as exc:
-            print(
-                f"Country search '{letter}' failed: {exc}"
+        for child in value.values():
+            recursively_find_country_objects(
+                child,
+                results,
             )
-            continue
 
-    # ------------------------------------------------------------
-    # Final search with no text.
-    # ------------------------------------------------------------
+    elif isinstance(value, list):
+        for child in value:
+            recursively_find_country_objects(
+                child,
+                results,
+            )
+
+
+def extract_countries_from_text(
+    text: str,
+) -> list[Country]:
+    results: list[Country] = []
+
+    if not text:
+        return results
+
+    # First try JSON.
     try:
-        combobox.click()
-        combobox.fill("")
+        data = json.loads(text)
 
-        page.wait_for_timeout(500)
+        recursively_find_country_objects(
+            data,
+            results,
+        )
 
-        options = get_visible_options(page)
-
-        for option_text in options:
-            if is_country_placeholder(option_text):
-                continue
-
-            key = normalize_for_lookup(option_text)
-
-            if key and key not in discovered:
-                discovered[key] = Country(
-                    website_name=option_text,
-                    english_name=english_country_name(
-                        option_text
-                    ),
-                    value="",
-                )
-
+        if results:
+            return deduplicate_countries(results)
     except Exception:
         pass
 
-    return list(discovered.values())
-
-
-# ============================================================================
-# COUNTRY DISCOVERY
-# ============================================================================
-
-def discover_countries(page):
-    """
-    Detect the country control and discover all countries.
-    """
-    control_type, control = find_country_control(page)
-
-    print(
-        f"Country control detected: {control_type}"
-    )
-
-    if control_type == "select":
-        countries = countries_from_native_select(
-            control
-        )
-    else:
-        countries = discover_countries_from_combobox(
-            page,
-            control,
-        )
-
-    # ------------------------------------------------------------
-    # Final safety filter.
-    # ------------------------------------------------------------
-    countries = [
-        country
-        for country in countries
-        if not is_country_placeholder(
-            country.website_name
-        )
+    # Look for arrays embedded inside JavaScript.
+    candidate_patterns = [
+        r"\[[^\]]{20,500000}\]",
+        r"\{[^{}]{20,500000}\}",
     ]
 
-    if not countries:
-        save_diagnostics(page)
-
-        raise RuntimeError(
-            "Country field was found, but no actual country "
-            "options were discovered. The placeholder "
-            "ជ្រើសរើសប្រទេស was not counted as a country."
-        )
-
-    # Sort by English name.
-    countries.sort(
-        key=lambda country: (
-            normalize_for_lookup(
-                country.english_name
-            ),
-            normalize_for_lookup(
-                country.website_name
-            ),
-        )
-    )
-
-    return countries
-
-
-# ============================================================================
-# COUNTRY SELECTION
-# ============================================================================
-
-def select_country(
-    page,
-    country: Country,
-):
-    """
-    Select one actual country.
-
-    IMPORTANT:
-    The placeholder "ជ្រើសរើសប្រទេស" is never selected.
-    """
-    control_type, control = find_country_control(page)
-
-    if control_type == "select":
-
-        # --------------------------------------------------------
-        # First try option value.
-        # --------------------------------------------------------
-        if country.value:
-            try:
-                control.select_option(
-                    value=country.value
-                )
-
-                page.wait_for_timeout(300)
-
-                return
-            except Exception:
-                pass
-
-        # --------------------------------------------------------
-        # Then try exact visible label.
-        # --------------------------------------------------------
+    for pattern in candidate_patterns:
         try:
-            control.select_option(
-                label=country.website_name
+            matches = re.findall(
+                pattern,
+                text,
+                flags=re.DOTALL,
             )
-
-            page.wait_for_timeout(300)
-
-            return
         except Exception:
-            pass
+            matches = []
 
-        raise RuntimeError(
-            f"Could not select country: "
-            f"{country.website_name}"
-        )
+        for candidate in matches[:100]:
+            try:
+                parsed = json.loads(candidate)
 
-    # ----------------------------------------------------------------
-    # CUSTOM COMBOBOX
-    # ----------------------------------------------------------------
+                recursively_find_country_objects(
+                    parsed,
+                    results,
+                )
+            except Exception:
+                continue
 
-    control.click()
+    return deduplicate_countries(results)
 
-    try:
-        control.fill("")
-    except Exception:
-        control.press("Control+A")
-        control.press("Backspace")
 
-    # Search the exact Cambodian country name.
-    try:
-        control.fill(
+def deduplicate_countries(
+    countries: list[Country],
+) -> list[Country]:
+    result: list[Country] = []
+    seen: set[str] = set()
+
+    for country in countries:
+        key = normalize_country_key(
             country.website_name
         )
-    except Exception:
-        control.type(
-            country.website_name
-        )
 
-    page.wait_for_timeout(500)
+        if not key:
+            continue
 
-    selectors = [
-        '[role="option"]:visible',
-        'li[role="option"]:visible',
-        'mat-option:visible',
-        '.dropdown-item:visible',
-        '.select-option:visible',
-        '.option:visible',
-    ]
+        if key in seen:
+            continue
 
-    for selector in selectors:
+        seen.add(key)
+        result.append(country)
 
-        locator = page.locator(selector)
+    return result
+
+
+# ============================================================
+# EXTRACT COUNTRIES FROM LIVE DOM
+# ============================================================
+
+def countries_from_select(
+    page: Page,
+) -> list[Country]:
+    result: list[Country] = []
+
+    selects = page.locator("select")
+
+    count = selects.count()
+
+    for index in range(count):
+        select = selects.nth(index)
 
         try:
-            count = locator.count()
-        except Exception:
-            count = 0
-
-        for i in range(count):
-            option = locator.nth(i)
-
-            if not visible(option):
+            if not select.is_visible():
                 continue
+        except Exception:
+            continue
+
+        options = select.locator("option")
+
+        option_count = options.count()
+
+        print(
+            f"Visible select #{index}: "
+            f"{option_count} option(s)"
+        )
+
+        for option_index in range(option_count):
+            option = options.nth(option_index)
 
             try:
                 text = clean_text(
                     option.inner_text()
                 )
-            except Exception:
-                text = ""
 
-            # Never click the placeholder.
-            if is_country_placeholder(text):
+                value = clean_text(
+                    option.get_attribute("value")
+                    or ""
+                )
+
+                disabled = (
+                    option.get_attribute("disabled")
+                    is not None
+                )
+
+                if disabled:
+                    continue
+
+                if is_placeholder(text):
+                    continue
+
+                if not text:
+                    continue
+
+                result.append(
+                    Country(
+                        website_name=text,
+                        english_name=translate_country(text),
+                        value=value,
+                    )
+                )
+            except Exception:
                 continue
 
-            if (
-                normalize_for_lookup(text)
-                == normalize_for_lookup(
-                    country.website_name
-                )
-            ):
-                option.click()
+    return deduplicate_countries(result)
 
-                page.wait_for_timeout(300)
+
+def dump_select_information(page: Page) -> None:
+    print("Inspecting Country select...")
+
+    try:
+        selects = page.locator("select")
+        count = selects.count()
+
+        print(f"Total select elements: {count}")
+
+        for index in range(count):
+            select = selects.nth(index)
+
+            try:
+                print(
+                    f"  SELECT #{index}: "
+                    f"name={select.get_attribute('name')!r}, "
+                    f"id={select.get_attribute('id')!r}, "
+                    f"class={select.get_attribute('class')!r}"
+                )
+
+                options = select.locator("option")
+
+                for option_index in range(
+                    min(options.count(), 20)
+                ):
+                    option = options.nth(option_index)
+
+                    print(
+                        "    OPTION:",
+                        repr(
+                            clean_text(
+                                option.inner_text()
+                            )
+                        ),
+                        "value=",
+                        repr(
+                            option.get_attribute(
+                                "value"
+                            )
+                        ),
+                    )
+            except Exception:
+                pass
+
+    except Exception as exc:
+        print(
+            "Could not inspect selects:",
+            exc,
+        )
+
+
+# ============================================================
+# PERFORMANCE RESOURCE INSPECTION
+# ============================================================
+
+def get_performance_resources(
+    page: Page,
+) -> list[str]:
+    try:
+        resources = page.evaluate(
+            """
+            () => performance
+                .getEntriesByType('resource')
+                .map(x => x.name)
+            """
+        )
+
+        return [
+            clean_text(url)
+            for url in resources
+            if clean_text(url)
+        ]
+
+    except Exception:
+        return []
+
+
+def print_interesting_resources(
+    page: Page,
+) -> None:
+    resources = get_performance_resources(page)
+
+    interesting = []
+
+    keywords = [
+        "api",
+        "country",
+        "countries",
+        "destination",
+        "calculate",
+        "international",
+        "price",
+        "service",
+    ]
+
+    for url in resources:
+        lowered = url.lower()
+
+        if any(
+            keyword in lowered
+            for keyword in keywords
+        ):
+            interesting.append(url)
+
+    print(
+        f"Interesting browser resources: "
+        f"{len(interesting)}"
+    )
+
+    for url in interesting[:100]:
+        print(
+            "  ",
+            url,
+        )
+
+
+# ============================================================
+# SCRIPT SOURCE INSPECTION
+# ============================================================
+
+def inspect_script_sources(
+    page: Page,
+) -> list[str]:
+    urls: list[str] = []
+
+    try:
+        scripts = page.locator(
+            "script[src]"
+        )
+
+        count = scripts.count()
+
+        print(
+            f"Page has {count} external script(s)."
+        )
+
+        for index in range(count):
+            script = scripts.nth(index)
+
+            try:
+                src = clean_text(
+                    script.get_attribute("src")
+                    or ""
+                )
+
+                if src:
+                    urls.append(src)
+            except Exception:
+                continue
+
+    except Exception:
+        pass
+
+    return urls
+
+
+def search_loaded_scripts_for_api_hints(
+    page: Page,
+) -> list[str]:
+    hints: list[str] = []
+
+    scripts = inspect_script_sources(page)
+
+    interesting_words = [
+        "country",
+        "countries",
+        "destination",
+        "calculate",
+        "international",
+        "/api/",
+        "axios",
+        "fetch(",
+    ]
+
+    for script_url in scripts:
+        lowered = script_url.lower()
+
+        if any(
+            word in lowered
+            for word in interesting_words
+        ):
+            hints.append(
+                f"SCRIPT URL: {script_url}"
+            )
+
+    # Inspect inline scripts as well.
+    try:
+        inline_scripts = page.locator(
+            "script:not([src])"
+        )
+
+        count = inline_scripts.count()
+
+        for index in range(count):
+            script = inline_scripts.nth(index)
+
+            try:
+                text = script.inner_text()
+
+                if not text:
+                    continue
+
+                lowered = text.lower()
+
+                if any(
+                    word in lowered
+                    for word in interesting_words
+                ):
+                    # Extract URL-like strings.
+                    found_urls = re.findall(
+                        r"""["']([^"']*(?:api|country|countries|calculate|international|destination)[^"']*)["']""",
+                        text,
+                        flags=re.IGNORECASE,
+                    )
+
+                    for found in found_urls:
+                        hints.append(
+                            f"INLINE SCRIPT HINT: {found}"
+                        )
+            except Exception:
+                continue
+
+    except Exception:
+        pass
+
+    return hints
+
+
+# ============================================================
+# COUNTRY DISCOVERY FROM NETWORK
+# ============================================================
+
+def countries_from_network(
+    network: NetworkCapture,
+) -> list[Country]:
+    all_countries: list[Country] = []
+
+    for response in network.responses:
+        body = response.get("body", "")
+
+        if not body:
+            continue
+
+        url = response.get("url", "")
+
+        print(
+            "Inspecting network response:",
+            response.get("status"),
+            url,
+        )
+
+        countries = extract_countries_from_text(
+            body
+        )
+
+        if countries:
+            print(
+                f"  Found {len(countries)} "
+                f"possible country record(s)"
+            )
+
+            all_countries.extend(
+                countries
+            )
+
+    return deduplicate_countries(
+        all_countries
+    )
+
+
+# ============================================================
+# WAIT FOR DYNAMIC COUNTRY DATA
+# ============================================================
+
+def wait_for_dynamic_countries(
+    page: Page,
+    network: NetworkCapture,
+) -> list[Country]:
+
+    print(
+        "Waiting for Cambodia Post's "
+        "dynamic country data..."
+    )
+
+    deadline = (
+        time.monotonic()
+        + COUNTRY_DISCOVERY_TIMEOUT / 1000
+    )
+
+    last_count = -1
+
+    while time.monotonic() < deadline:
+        # Check real DOM first.
+        dom_countries = countries_from_select(
+            page
+        )
+
+        if dom_countries:
+            print(
+                f"Country options appeared in DOM: "
+                f"{len(dom_countries)}"
+            )
+
+            return dom_countries
+
+        # Check captured network responses.
+        network_countries = countries_from_network(
+            network
+        )
+
+        if network_countries:
+            print(
+                f"Countries found in network data: "
+                f"{len(network_countries)}"
+            )
+
+            return network_countries
+
+        current_count = len(network.responses)
+
+        if current_count != last_count:
+            print(
+                f"Captured network responses: "
+                f"{current_count}"
+            )
+
+            last_count = current_count
+
+        # Try opening the country select.
+        try:
+            selects = page.locator("select")
+
+            for index in range(selects.count()):
+                select = selects.nth(index)
+
+                try:
+                    if select.is_visible():
+                        select.click(
+                            timeout=2_000
+                        )
+
+                        time.sleep(0.5)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        time.sleep(1)
+
+    return deduplicate_countries(
+        countries_from_select(page)
+        + countries_from_network(network)
+    )
+
+
+# ============================================================
+# OPTIONAL DOM INJECTION
+# ============================================================
+
+def inject_discovered_country_options(
+    page: Page,
+    countries: list[Country],
+) -> None:
+    """
+    If Cambodia Post's JavaScript API gives us the country list
+    but the page fails to insert the options into the select,
+    add the discovered options to the existing select.
+
+    This is deliberately only a fallback.
+
+    The site's own Calculate button/event handlers are still used.
+    """
+
+    if not countries:
+        return
+
+    print(
+        "Injecting discovered country options "
+        "into the existing select as a fallback..."
+    )
+
+    payload = [
+        {
+            "name": country.website_name,
+            "english": country.english_name,
+            "value": country.value,
+        }
+        for country in countries
+    ]
+
+    result = page.evaluate(
+        """
+        (countries) => {
+            const selects = [
+                ...document.querySelectorAll("select")
+            ];
+
+            if (!selects.length) {
+                return {
+                    ok: false,
+                    reason: "no-select"
+                };
+            }
+
+            let target = null;
+
+            for (const select of selects) {
+                const text =
+                    (select.parentElement?.innerText || "")
+                    .toLowerCase();
+
+                const aria =
+                    (
+                        select.getAttribute("aria-label")
+                        || ""
+                    ).toLowerCase();
+
+                const name =
+                    (
+                        select.getAttribute("name")
+                        || ""
+                    ).toLowerCase();
+
+                const id =
+                    (
+                        select.getAttribute("id")
+                        || ""
+                    ).toLowerCase();
+
+                if (
+                    text.includes("country")
+                    || text.includes("ប្រទេស")
+                    || aria.includes("country")
+                    || aria.includes("ប្រទេស")
+                    || name.includes("country")
+                    || id.includes("country")
+                ) {
+                    target = select;
+                    break;
+                }
+            }
+
+            if (!target) {
+                target = selects[0];
+            }
+
+            const existing = [
+                ...target.options
+            ].map(option => option.value);
+
+            let added = 0;
+
+            for (const country of countries) {
+                const value =
+                    country.value
+                    || country.name;
+
+                if (
+                    !value
+                    || existing.includes(value)
+                ) {
+                    continue;
+                }
+
+                const option =
+                    document.createElement("option");
+
+                option.value = value;
+                option.textContent = country.name;
+
+                target.appendChild(option);
+
+                added += 1;
+            }
+
+            target.dispatchEvent(
+                new Event("input", {
+                    bubbles: true
+                })
+            );
+
+            target.dispatchEvent(
+                new Event("change", {
+                    bubbles: true
+                })
+            );
+
+            return {
+                ok: true,
+                added,
+                total: target.options.length
+            };
+        }
+        """,
+        payload,
+    )
+
+    print(
+        "Country option injection result:",
+        result,
+    )
+
+
+# ============================================================
+# FIND COUNTRY SELECT
+# ============================================================
+
+def find_country_select(
+    page: Page,
+):
+    selects = page.locator("select")
+
+    count = selects.count()
+
+    if count == 0:
+        return None
+
+    # Prefer a select whose surrounding text says Country.
+    for index in range(count):
+        select = selects.nth(index)
+
+        try:
+            if not select.is_visible():
+                continue
+
+            surrounding = page.evaluate(
+                """
+                (element) => {
+                    const parent =
+                        element.closest(
+                            "div, form, section"
+                        );
+
+                    return (
+                        parent?.innerText
+                        || element.parentElement?.innerText
+                        || ""
+                    );
+                }
+                """,
+                select.element_handle(),
+            )
+
+            text = clean_text(
+                surrounding or ""
+            ).lower()
+
+            if (
+                "country" in text
+                or "ប្រទេស" in text
+            ):
+                return select
+
+        except Exception:
+            continue
+
+    # Otherwise use first visible select.
+    for index in range(count):
+        select = selects.nth(index)
+
+        try:
+            if select.is_visible():
+                return select
+        except Exception:
+            continue
+
+    return None
+
+
+# ============================================================
+# DISCOVER COUNTRIES
+# ============================================================
+
+def discover_countries(
+    page: Page,
+    network: NetworkCapture,
+) -> list[Country]:
+
+    print(
+        "============================================================"
+    )
+    print("COUNTRY DISCOVERY")
+    print(
+        "============================================================"
+    )
+
+    # Let initial JavaScript run.
+    time.sleep(3)
+
+    dump_select_information(page)
+
+    countries = countries_from_select(page)
+
+    if countries:
+        print(
+            f"Countries discovered directly from select: "
+            f"{len(countries)}"
+        )
+
+        return countries
+
+    print(
+        "No actual country options in the select."
+    )
+
+    print(
+        "Checking dynamic network/API data..."
+    )
+
+    countries = wait_for_dynamic_countries(
+        page,
+        network,
+    )
+
+    if countries:
+        print(
+            f"Countries discovered dynamically: "
+            f"{len(countries)}"
+        )
+
+        # If the actual select still only has the placeholder,
+        # add the dynamically discovered options.
+        current_dom = countries_from_select(page)
+
+        if not current_dom:
+            inject_discovered_country_options(
+                page,
+                countries,
+            )
+
+            time.sleep(1)
+
+            after_injection = countries_from_select(
+                page
+            )
+
+            if after_injection:
+                print(
+                    "Country select now contains "
+                    f"{len(after_injection)} option(s)."
+                )
+
+                return after_injection
+
+        return countries
+
+    print(
+        "No countries found in the DOM or captured API data."
+    )
+
+    print_interesting_resources(page)
+
+    hints = search_loaded_scripts_for_api_hints(
+        page
+    )
+
+    if hints:
+        print(
+            "Possible API/script hints:"
+        )
+
+        for hint in hints[:100]:
+            print(
+                "  ",
+                hint,
+            )
+
+    dump_select_information(page)
+
+    save_debug(
+        page,
+        network,
+    )
+
+    raise RuntimeError(
+        "Cambodia Post's Country select contains only "
+        "the placeholder, and no country list could be "
+        "found in the page or dynamic network data. "
+        "Debug files were saved."
+    )
+
+
+# ============================================================
+# COUNTRY SELECTION
+# ============================================================
+
+def select_country(
+    page: Page,
+    country: Country,
+) -> None:
+
+    select = find_country_select(page)
+
+    if select is None:
+        raise RuntimeError(
+            "Country select could not be found."
+        )
+
+    # First try exact value.
+    if country.value:
+        try:
+            select.select_option(
+                value=country.value,
+                timeout=5_000,
+            )
+
+            return
+        except Exception:
+            pass
+
+    # Then exact label.
+    try:
+        select.select_option(
+            label=country.website_name,
+            timeout=5_000,
+        )
+
+        return
+    except Exception:
+        pass
+
+    # Finally inspect all options and use normalized text.
+    options = select.locator("option")
+
+    target_key = normalize_country_key(
+        country.website_name
+    )
+
+    for index in range(options.count()):
+        option = options.nth(index)
+
+        try:
+            text = clean_text(
+                option.inner_text()
+            )
+
+            if (
+                normalize_country_key(text)
+                == target_key
+            ):
+                value = (
+                    option.get_attribute("value")
+                    or text
+                )
+
+                select.select_option(
+                    value=value,
+                    timeout=5_000,
+                )
 
                 return
 
-    # ----------------------------------------------------------------
-    # Exact visible text fallback.
-    # ----------------------------------------------------------------
-    exact_candidates = page.get_by_text(
-        country.website_name,
-        exact=True,
-    )
-
-    try:
-        count = exact_candidates.count()
-    except Exception:
-        count = 0
-
-    for i in range(count):
-        candidate = exact_candidates.nth(i)
-
-        if not visible(candidate):
-            continue
-
-        try:
-            candidate.click()
-
-            page.wait_for_timeout(300)
-
-            return
         except Exception:
             continue
 
@@ -951,533 +1458,458 @@ def select_country(
     )
 
 
-# ============================================================================
-# WEIGHT FIELD
-# ============================================================================
+# ============================================================
+# WEIGHT INPUT
+# ============================================================
 
-def find_weight_input(page):
-    """
-    Find the Weight(kg) field.
-    """
+def find_weight_input(page: Page):
     selectors = [
-        'input[placeholder*="weight" i]:visible',
-        'input[aria-label*="weight" i]:visible',
-        'input[name*="weight" i]:visible',
-        'input[id*="weight" i]:visible',
-        'input[formcontrolname*="weight" i]:visible',
-
-        'input[placeholder*="ទម្ងន់" i]:visible',
-        'input[aria-label*="ទម្ងន់" i]:visible',
-        'input[name*="ទម្ងន់" i]:visible',
-        'input[id*="ទម្ងន់" i]:visible',
-
-        'input[type="number"]:visible',
+        'input[placeholder*="បញ្ចូលទម្ងន់"]',
+        'input[placeholder*="weight" i]',
+        'input[name*="weight" i]',
+        'input[id*="weight" i]',
+        'input[type="number"]',
+        'input[type="text"]',
     ]
 
     for selector in selectors:
-
         locator = page.locator(selector)
 
         try:
             count = locator.count()
+
+            for index in range(count):
+                item = locator.nth(index)
+
+                if item.is_visible():
+                    return item
+
         except Exception:
-            count = 0
-
-        for i in range(count):
-            candidate = locator.nth(i)
-
-            if visible(candidate):
-                return candidate
+            continue
 
     return None
 
 
-def set_weight(page):
-    """
-    Enter exactly 0.02 kg.
-    """
+def set_weight(
+    page: Page,
+    weight: str,
+) -> None:
+
     weight_input = find_weight_input(page)
 
     if weight_input is None:
-        save_diagnostics(page)
-
         raise RuntimeError(
-            "Could not find the Weight input field."
+            "Weight input could not be found."
         )
 
-    weight_input.click()
+    weight_input.fill(weight)
 
-    try:
-        weight_input.fill(WEIGHT)
-    except Exception:
-        weight_input.press("Control+A")
-        weight_input.press("Backspace")
-        weight_input.type(WEIGHT)
-
+    # Trigger input/change events.
     try:
         weight_input.press("Tab")
     except Exception:
         pass
 
-    page.wait_for_timeout(200)
 
-
-# ============================================================================
+# ============================================================
 # CALCULATE BUTTON
-# ============================================================================
+# ============================================================
 
-def find_calculate_button(page):
-    """
-    Find the Calculate button.
-    """
+def find_calculate_button(page: Page):
     selectors = [
-        'button:visible',
-        'input[type="submit"]:visible',
-        'input[type="button"]:visible',
+        "button",
+        'input[type="button"]',
+        'input[type="submit"]',
     ]
 
     for selector in selectors:
-
         locator = page.locator(selector)
 
         try:
             count = locator.count()
+
+            for index in range(count):
+                button = locator.nth(index)
+
+                if not button.is_visible():
+                    continue
+
+                text = clean_text(
+                    button.inner_text()
+                ).lower()
+
+                value = clean_text(
+                    button.get_attribute("value")
+                    or ""
+                ).lower()
+
+                if (
+                    "calculate" in text
+                    or "គណនា" in text
+                    or "calculate" in value
+                    or "គណនា" in value
+                ):
+                    return button
+
         except Exception:
-            count = 0
-
-        for i in range(count):
-            candidate = locator.nth(i)
-
-            try:
-                tag_name = candidate.evaluate(
-                    "el => el.tagName.toLowerCase()"
-                )
-
-                if tag_name == "button":
-                    text = clean_text(
-                        candidate.inner_text()
-                    )
-                else:
-                    text = clean_text(
-                        candidate.get_attribute(
-                            "value"
-                        )
-                        or candidate.get_attribute(
-                            "aria-label"
-                        )
-                        or ""
-                    )
-            except Exception:
-                text = ""
-
-            if (
-                "calculate" in text.casefold()
-                or "គណនា" in text
-            ):
-                return candidate
-
-    # Accessible-name fallback.
-    try:
-        button = page.get_by_role(
-            "button",
-            name=re.compile(
-                r"calculate|គណនា",
-                re.IGNORECASE,
-            ),
-        )
-
-        if visible(button):
-            return button
-    except Exception:
-        pass
+            continue
 
     return None
 
 
-def click_calculate(page):
-    button = find_calculate_button(page)
+# ============================================================
+# RESULT DETECTION
+# ============================================================
 
-    if button is None:
-        save_diagnostics(page)
-
-        raise RuntimeError(
-            "Could not find the Calculate button."
+def page_text(page: Page) -> str:
+    try:
+        return clean_text(
+            page.locator("body").inner_text()
         )
-
-    button.click()
-
-
-# ============================================================================
-# WAIT FOR CALCULATION
-# ============================================================================
-
-def wait_for_calculation(page):
-    """
-    Wait for calculation/loading to finish.
-    """
-    loading_selectors = [
-        'text=Loading',
-        'text=loading',
-        '[aria-busy="true"]',
-        '.loading',
-        '.spinner',
-        '.loader',
-    ]
-
-    for selector in loading_selectors:
-
-        try:
-            locator = page.locator(selector)
-
-            if locator.count() > 0:
-                locator.first.wait_for(
-                    state="hidden",
-                    timeout=RESULT_TIMEOUT,
-                )
-
-        except Exception:
-            pass
-
-    # Allow result to render.
-    page.wait_for_timeout(2_000)
+    except Exception:
+        return ""
 
 
-# ============================================================================
-# FIND LETTER SERVICE
-# ============================================================================
+def contains_error_message(
+    text: str,
+) -> bool:
 
-def find_letter_service(page):
-    """
-    Find the Letter service result.
-    """
-    selectors = [
-        "text=Letter",
-        "text=letter",
-    ]
-
-    candidates = []
-
-    for selector in selectors:
-
-        locator = page.locator(selector)
-
-        try:
-            count = locator.count()
-        except Exception:
-            count = 0
-
-        for i in range(count):
-
-            candidate = locator.nth(i)
-
-            if not visible(candidate):
-                continue
-
-            try:
-                text = clean_text(
-                    candidate.inner_text()
-                )
-            except Exception:
-                continue
-
-            if "letter" not in text.casefold():
-                continue
-
-            candidates.append(
-                (
-                    len(text),
-                    candidate,
-                    text,
-                )
-            )
-
-    # Prefer the smallest useful result block.
-    candidates.sort(
-        key=lambda item: item[0]
-    )
-
-    for _, candidate, text in candidates:
-
-        lowered = text.casefold()
-
-        if (
-            "price" in lowered
-            or "khr" in lowered
-            or "៛" in text
-            or "រៀល" in text
-            or re.search(r"\d", text)
-        ):
-            return text
-
-    # Fallback to body text.
-    body = get_body_text(page)
-
-    if "letter" in body.casefold():
-        return body
-
-    return ""
-
-
-# ============================================================================
-# ERROR DETECTION
-# ============================================================================
-
-def detect_error(page):
-    """
-    Detect a displayed calculation/service error.
-    """
-    error_selectors = [
-        '[role="alert"]:visible',
-        ".alert-danger:visible",
-        ".alert-error:visible",
-        ".error:visible",
-        ".text-danger:visible",
-        ".invalid-feedback:visible",
-    ]
+    lowered = text.lower()
 
     error_patterns = [
-        r"\berror\b",
-        r"something went wrong",
-        r"calculation failed",
-        r"\bfailed\b",
-        r"\bcannot\b",
-        r"\bunable\b",
-        r"not available",
-        r"service unavailable",
-        r"suspended",
-        r"no service",
-
-        r"មិនអាច",
-        r"មិនមាន",
-        r"ផ្អាក",
-        r"កំហុស",
+        "error",
+        "failed",
+        "failure",
+        "invalid",
+        "not available",
+        "unavailable",
+        "suspended",
+        "cannot",
+        "unable",
+        "មិនអាច",
+        "បរាជ័យ",
+        "មិនមាន",
+        "មិនអាចផ្ញើ",
+        "ផ្អាក",
+        "មិនទាន់មាន",
     ]
 
-    for selector in error_selectors:
-
-        locator = page.locator(selector)
-
-        try:
-            count = locator.count()
-        except Exception:
-            count = 0
-
-        for i in range(count):
-
-            candidate = locator.nth(i)
-
-            if not visible(candidate):
-                continue
-
-            try:
-                text = clean_text(
-                    candidate.inner_text()
-                )
-            except Exception:
-                text = ""
-
-            if text:
-                return text
-
-    body = get_body_text(page)
-
     for pattern in error_patterns:
+        if pattern.lower() in lowered:
+            return True
 
+    return False
+
+
+def find_letter_section(
+    page: Page,
+) -> str:
+
+    text = page_text(page)
+
+    lines = [
+        clean_text(line)
+        for line in text.splitlines()
+        if clean_text(line)
+    ]
+
+    relevant: list[str] = []
+
+    for index, line in enumerate(lines):
         if re.search(
-            pattern,
-            body,
-            re.IGNORECASE,
+            r"\bLetter\b",
+            line,
+            flags=re.IGNORECASE,
         ):
-            return body
+            start = max(0, index - 2)
+            end = min(
+                len(lines),
+                index + 6,
+            )
 
-    return ""
+            relevant.extend(
+                lines[start:end]
+            )
 
+    return "\n".join(
+        dict.fromkeys(relevant)
+    )
 
-# ============================================================================
-# LETTER PRICE CHECK
-# ============================================================================
 
 def letter_has_price(
-    letter_text: str,
+    section: str,
 ) -> bool:
-    """
-    Check whether Letter contains a displayed price.
-    """
-    if not letter_text:
+
+    if not section:
         return False
 
-    text = clean_text(
-        letter_text
+    lowered = section.lower()
+
+    price_words = [
+        "price",
+        "khr",
+        "៛",
+        "រៀល",
+    ]
+
+    has_price_label = any(
+        word in lowered
+        for word in price_words
     )
 
-    has_price_label = bool(
-        re.search(
-            r"price\s*(?:\(\s*khr\s*\))?",
-            text,
-            re.IGNORECASE,
-        )
-    )
+    if not has_price_label:
+        return False
 
-    has_khr = bool(
-        re.search(
-            r"\bkhr\b|៛|រៀល",
-            text,
-            re.IGNORECASE,
-        )
-    )
-
+    # Detect an amount such as:
+    # 2,600
+    # 2600
+    # 2 600
+    # 2.600
     has_number = bool(
         re.search(
-            r"\d[\d,\.\s]*",
-            text,
+            r"\b\d{1,3}(?:[,\s.]\d{3})+\b|\b\d{3,}\b",
+            section,
         )
     )
 
-    return (
-        has_price_label
-        or has_khr
-    ) and has_number
+    return has_number
 
 
-# ============================================================================
-# RESULT EVALUATION
-# ============================================================================
+def analyze_result(
+    page: Page,
+) -> tuple[bool, str]:
 
-def evaluate_result(page):
-    """
-    Determine whether the destination is suspended.
-
-    Suspended if:
-      1. Error message appears.
-      2. Letter service is missing.
-      3. Letter service exists but has no Price (KHR).
-    """
-    error = detect_error(page)
-
-    if error:
-        return (
-            True,
-            "Error message displayed",
-        )
-
-    letter_text = find_letter_service(
-        page
+    # Give the page a moment to render the result.
+    deadline = (
+        time.monotonic()
+        + RESULT_TIMEOUT / 1000
     )
 
-    if not letter_text:
-        return (
-            True,
-            "Letter service missing",
-        )
+    last_text = ""
 
-    if not letter_has_price(
-        letter_text
+    while time.monotonic() < deadline:
+        text = page_text(page)
+
+        if text:
+            last_text = text
+
+            section = find_letter_section(
+                page
+            )
+
+            if contains_error_message(text):
+                return (
+                    True,
+                    "Error message detected",
+                )
+
+            if not re.search(
+                r"\bLetter\b",
+                text,
+                flags=re.IGNORECASE,
+            ):
+                # Keep waiting because result may
+                # still be rendering.
+                time.sleep(0.5)
+                continue
+
+            if not letter_has_price(section):
+                return (
+                    True,
+                    "Letter service is displayed "
+                    "but Price (KHR) is missing",
+                )
+
+            return (
+                False,
+                "Letter service with Price (KHR) detected",
+            )
+
+        time.sleep(0.5)
+
+    # Final check.
+    if not re.search(
+        r"\bLetter\b",
+        last_text,
+        flags=re.IGNORECASE,
     ):
         return (
             True,
-            "Letter service has no Price (KHR)",
+            "Letter service was not displayed",
         )
 
     return (
-        False,
-        "Letter service has a displayed price",
+        True,
+        "Price (KHR) was not displayed for Letter",
     )
 
 
-# ============================================================================
+# ============================================================
 # TEST ONE COUNTRY
-# ============================================================================
+# ============================================================
 
 def test_country(
-    page,
+    page: Page,
     country: Country,
-):
-    """
-    Required order:
+) -> tuple[bool, str]:
 
-        1. Select country
-        2. Enter 0.02 kg
-        3. Click Calculate
-        4. Check result
-    """
     print(
-        f"Testing: "
-        f"{country.website_name} — "
-        f"{country.english_name}"
+        f"Testing: {country.display_name}"
     )
 
-    # ------------------------------------------------------------
+    # --------------------------------------------------------
+    # REQUIRED ORDER:
     # 1. Select country
-    # ------------------------------------------------------------
+    # 2. Enter 0.02
+    # 3. Click Calculate
+    # 4. Analyze result
+    # --------------------------------------------------------
+
     select_country(
         page,
         country,
     )
 
-    # ------------------------------------------------------------
-    # 2. Enter weight
-    # ------------------------------------------------------------
-    set_weight(page)
+    set_weight(
+        page,
+        WEIGHT,
+    )
 
-    # ------------------------------------------------------------
-    # 3. Click Calculate
-    # ------------------------------------------------------------
-    click_calculate(page)
+    calculate_button = find_calculate_button(
+        page
+    )
 
-    # ------------------------------------------------------------
-    # 4. Wait and inspect result
-    # ------------------------------------------------------------
-    wait_for_calculation(page)
+    if calculate_button is None:
+        raise RuntimeError(
+            "Calculate button could not be found."
+        )
 
-    suspended, reason = evaluate_result(
+    calculate_button.click()
+
+    suspended, reason = analyze_result(
         page
     )
 
     if suspended:
-
         print(
-            f"  SUSPENDED: "
-            f"{country.website_name} — "
-            f"{country.english_name} "
-            f"({reason})"
+            f"  -> SUSPENDED: {reason}"
         )
-
     else:
-
         print(
-            f"  ACTIVE: "
-            f"{country.website_name} — "
-            f"{country.english_name}"
+            f"  -> ACTIVE: {reason}"
         )
 
     return suspended, reason
 
 
-# ============================================================================
-# WRITE OUTPUT FILE
-# ============================================================================
+# ============================================================
+# TEST ALL COUNTRIES
+# ============================================================
 
-def write_output(
-    countries,
-    suspended,
-):
-    """
-    Write the final monitoring text file.
-    """
-    checked = datetime.now(
-        timezone.utc
-    ).strftime(
-        "%Y-%m-%d %H:%M:%S UTC"
+def test_all_countries(
+    page: Page,
+    countries: list[Country],
+) -> list[Country]:
+
+    suspended: list[Country] = []
+
+    total = len(countries)
+
+    print(
+        "============================================================"
+    )
+    print(
+        f"TESTING {total} COUNTRIES"
+    )
+    print(
+        "============================================================"
     )
 
-    lines = []
+    for index, country in enumerate(
+        countries,
+        start=1,
+    ):
+
+        print()
+        print(
+            f"[{index}/{total}] "
+            f"{country.display_name}"
+        )
+
+        try:
+            is_suspended, reason = test_country(
+                page,
+                country,
+            )
+
+            if is_suspended:
+                suspended.append(
+                    country
+                )
+
+        except Exception as exc:
+            print(
+                f"  -> TECHNICAL ERROR: {exc}"
+            )
+
+            # Reload before continuing.
+            # A technical Playwright/page error is NOT
+            # automatically treated as a suspended destination.
+            try:
+                page.reload(
+                    wait_until="domcontentloaded",
+                    timeout=PAGE_TIMEOUT,
+                )
+
+                time.sleep(2)
+
+            except Exception:
+                pass
+
+            # Re-inject country options if necessary.
+            try:
+                select = find_country_select(
+                    page
+                )
+
+                if select is not None:
+                    options = select.locator(
+                        "option"
+                    )
+
+                    if options.count() <= 1:
+                        print(
+                            "  Country options disappeared "
+                            "after reload."
+                        )
+
+            except Exception:
+                pass
+
+    return suspended
+
+
+# ============================================================
+# OUTPUT
+# ============================================================
+
+def write_output(
+    countries: list[Country],
+    suspended: list[Country],
+) -> None:
+
+    checked = datetime.now(
+        timezone.utc
+    ).astimezone()
+
+    lines: list[str] = []
 
     lines.append(
         "Cambodia Post International Shipping Monitor"
     )
 
     lines.append(
-        f"Checked: {checked}"
+        f"Checked: {checked.strftime('%Y-%m-%d %H:%M:%S %Z')}"
     )
 
     lines.append(
@@ -1489,10 +1921,6 @@ def write_output(
     )
 
     lines.append("")
-
-    # ========================================================================
-    # LIST 1
-    # ========================================================================
 
     lines.append(
         "LIST 1 - ALL COUNTRIES"
@@ -1506,70 +1934,76 @@ def write_output(
 
     for country in countries:
         lines.append(
-            country.output_name
+            country.display_name
         )
 
     lines.append("")
-
-    # ========================================================================
-    # LIST 2
-    # ========================================================================
 
     lines.append(
         "LIST 2 - SUSPENDED DESTINATIONS"
     )
 
     lines.append(
-        f"Total suspended destinations: "
-        f"{len(suspended)}"
+        f"Total suspended destinations: {len(suspended)}"
     )
 
     lines.append("")
 
     for country in suspended:
         lines.append(
-            country.output_name
+            country.display_name
         )
 
-    lines.append("")
-
     OUTPUT_FILE.write_text(
-        "\n".join(lines),
+        "\n".join(lines) + "\n",
         encoding="utf-8",
     )
 
-    print("")
-    print("=" * 60)
-    print("MONITORING COMPLETE")
-    print("=" * 60)
+    print()
     print(
-        f"Countries found: {len(countries)}"
+        "============================================================"
     )
+    print(
+        "OUTPUT WRITTEN"
+    )
+    print(
+        "============================================================"
+    )
+
+    print(
+        f"All countries: {len(countries)}"
+    )
+
     print(
         f"Suspended destinations: "
         f"{len(suspended)}"
     )
+
     print(
         f"Output file: {OUTPUT_FILE}"
     )
-    print("=" * 60)
 
 
-# ============================================================================
+# ============================================================
 # MAIN
-# ============================================================================
+# ============================================================
 
-def main():
-    countries = []
-    suspended = []
+def main() -> None:
+
+    network = NetworkCapture()
 
     with sync_playwright() as playwright:
 
-        browser = playwright.chromium.launch(
-            headless=True
+        browser: Browser = playwright.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+            ],
         )
 
-        page = browser.new_page(
+        context: BrowserContext = browser.new_context(
             viewport={
                 "width": 1440,
                 "height": 1200,
@@ -1577,19 +2011,34 @@ def main():
             locale="en-US",
         )
 
+        page: Page = context.new_page()
+
         page.set_default_timeout(
             PAGE_TIMEOUT
         )
 
+        # ----------------------------------------------------
+        # Capture network before opening the page.
+        # ----------------------------------------------------
+
+        page.on(
+            "request",
+            network.on_request,
+        )
+
+        page.on(
+            "response",
+            network.on_response,
+        )
+
+        attach_console_diagnostics(
+            page
+        )
+
         try:
 
-            # ================================================================
-            # OPEN WEBSITE
-            # ================================================================
-
             print(
-                "Opening Cambodia Post "
-                "international calculator..."
+                "Opening Cambodia Post international calculator..."
             )
 
             page.goto(
@@ -1598,146 +2047,211 @@ def main():
                 timeout=PAGE_TIMEOUT,
             )
 
-            page.wait_for_timeout(
-                3_000
-            )
-
-            # ================================================================
-            # DISCOVER COUNTRIES
-            # ================================================================
+            # Give application JavaScript time to initialize.
+            time.sleep(5)
 
             print(
-                "Discovering countries..."
+                f"Page loaded: {page.url}"
             )
 
-            countries = discover_countries(
+            # ------------------------------------------------
+            # Show useful network information.
+            # ------------------------------------------------
+
+            print_interesting_resources(
                 page
             )
 
-            print(
-                f"Discovered "
-                f"{len(countries)} countries."
+            # ------------------------------------------------
+            # Discover all countries.
+            # ------------------------------------------------
+
+            countries = discover_countries(
+                page,
+                network,
             )
 
-            print("")
-            print(
-                "Countries discovered:"
+            countries = deduplicate_countries(
+                countries
             )
 
-            for country in countries:
-
-                print(
-                    f"  {country.website_name} "
-                    f"— "
-                    f"{country.english_name}"
+            if not countries:
+                raise RuntimeError(
+                    "Country discovery returned zero countries."
                 )
 
-            # ================================================================
-            # TEST COUNTRIES
-            # ================================================================
-
-            print("")
+            print()
             print(
-                "Testing countries..."
+                "============================================================"
             )
-            print("")
+            print(
+                f"DISCOVERED {len(countries)} COUNTRIES"
+            )
+            print(
+                "============================================================"
+            )
 
             for index, country in enumerate(
                 countries,
                 start=1,
             ):
-
                 print(
-                    f"[{index}/{len(countries)}] "
-                    f"{country.website_name} "
-                    f"— "
-                    f"{country.english_name}"
+                    f"{index}. "
+                    f"{country.display_name}"
+                    f" [value={country.value!r}]"
                 )
 
-                try:
+            # Save discovered data for diagnostics.
+            try:
+                DEBUG_DATA.write_text(
+                    json.dumps(
+                        [
+                            {
+                                "website_name": c.website_name,
+                                "english_name": c.english_name,
+                                "value": c.value,
+                            }
+                            for c in countries
+                        ],
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass
 
-                    is_suspended, reason = (
-                        test_country(
-                            page,
-                            country,
-                        )
-                    )
+            # ------------------------------------------------
+            # IMPORTANT:
+            # Reload the page before actual testing.
+            #
+            # This ensures each test starts from a fresh
+            # calculator state.
+            # ------------------------------------------------
 
-                    if is_suspended:
-                        suspended.append(
-                            country
-                        )
+            print()
+            print(
+                "Reloading calculator before country tests..."
+            )
 
-                except Exception as exc:
+            page.reload(
+                wait_until="domcontentloaded",
+                timeout=PAGE_TIMEOUT,
+            )
 
-                    # --------------------------------------------------------
-                    # IMPORTANT:
-                    # A technical Playwright failure is NOT automatically
-                    # considered a suspended destination.
-                    # --------------------------------------------------------
+            time.sleep(4)
 
-                    print(
-                        f"  TECHNICAL ERROR: "
-                        f"{exc}"
-                    )
+            # Check whether options are still present.
+            current_options = countries_from_select(
+                page
+            )
 
-                    # Reload for a clean calculator state.
-                    try:
+            if not current_options:
+                # The page may again have failed to populate
+                # the select. Use the discovered country data.
+                print(
+                    "Country options are absent after reload."
+                )
 
-                        page.goto(
-                            URL,
-                            wait_until=(
-                                "domcontentloaded"
-                            ),
-                            timeout=(
-                                PAGE_TIMEOUT
-                            ),
-                        )
+                inject_discovered_country_options(
+                    page,
+                    countries,
+                )
 
-                        page.wait_for_timeout(
-                            2_000
-                        )
+                time.sleep(1)
 
-                    except Exception as reload_exc:
+            # ------------------------------------------------
+            # Test every country.
+            # ------------------------------------------------
 
-                        print(
-                            f"  Could not reload "
-                            f"page: "
-                            f"{reload_exc}"
-                        )
+            suspended = test_all_countries(
+                page,
+                countries,
+            )
 
-                        continue
-
-            # ================================================================
-            # WRITE OUTPUT
-            # ================================================================
+            # ------------------------------------------------
+            # Write output.
+            # ------------------------------------------------
 
             write_output(
                 countries,
                 suspended,
             )
 
+            network.save()
+
+            print()
+            print(
+                "Monitor completed successfully."
+            )
+
         except Exception as exc:
 
-            print("")
-            print("=" * 60)
-            print("MONITOR FAILED")
-            print("=" * 60)
-            print(str(exc))
-            print("=" * 60)
+            print()
+            print(
+                "============================================================"
+            )
+            print(
+                "MONITOR FAILED"
+            )
+            print(
+                "============================================================"
+            )
 
-            save_diagnostics(page)
+            print(
+                str(exc)
+            )
+
+            print(
+                "============================================================"
+            )
+
+            save_debug(
+                page,
+                network,
+            )
+
+            print()
+            print(
+                "Debug files created:"
+            )
+
+            print(
+                f"  {DEBUG_HTML}"
+            )
+
+            print(
+                f"  {DEBUG_PNG}"
+            )
+
+            print(
+                f"  {DEBUG_NETWORK}"
+            )
+
+            if DEBUG_DATA.exists():
+                print(
+                    f"  {DEBUG_DATA}"
+                )
 
             raise
 
         finally:
 
-            browser.close()
+            try:
+                network.save()
+            except Exception:
+                pass
 
+            try:
+                context.close()
+            except Exception:
+                pass
 
-# ============================================================================
-# RUN
-# ============================================================================
+            try:
+                browser.close()
+            except Exception:
+                pass
+
 
 if __name__ == "__main__":
     main()

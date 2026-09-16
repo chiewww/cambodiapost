@@ -1,32 +1,85 @@
 import json
 import re
 import sys
+import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from urllib.request import Request, urlopen
 
 from babel import Locale
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import (
+    Page,
+    TimeoutError as PlaywrightTimeoutError,
+    sync_playwright,
+)
 
+
+# ============================================================
+# CONFIGURATION
+# ============================================================
 
 URL = "https://www.cambodiapost.com.kh/calculate/international"
-COUNTRY_API = "https://www.cambodiapost.com.kh/select2/getAllCountries"
 
-DEBUG_HTML = Path("debug_single_country.html")
-DEBUG_PNG = Path("debug_single_country.png")
-DEBUG_API = Path("debug_single_country_api.json")
+COUNTRY_API = (
+    "https://www.cambodiapost.com.kh/select2/getAllCountries"
+)
+
+OUTPUT_FILE = Path("output_cambodia.txt")
+
+DEBUG_HTML = Path("debug_cambodiapost.html")
+DEBUG_PNG = Path("debug_cambodiapost.png")
+DEBUG_API = Path("debug_cambodiapost_api.json")
 
 WEIGHT = "0.02"
+
+PAGE_TIMEOUT = 60_000
+API_TIMEOUT = 60
+ACTION_TIMEOUT = 15_000
+RESULT_TIMEOUT = 15_000
 
 KHMER_LOCALE = Locale("km")
 ENGLISH_LOCALE = Locale("en")
 
 
-def log(message=""):
+# ============================================================
+# DATA STRUCTURE
+# ============================================================
+
+@dataclass
+class Country:
+    country_id: str
+    raw_text: str
+    code: str
+    english_name: str
+    khmer_name: str
+
+    @property
+    def display_name(self) -> str:
+        return (
+            f"{self.khmer_name} — "
+            f"{self.english_name}"
+        )
+
+
+# ============================================================
+# LOGGING
+# ============================================================
+
+def log(message: str = "") -> None:
     print(message, flush=True)
 
 
-def fetch_json(url, timeout=60):
+# ============================================================
+# COUNTRY API
+# ============================================================
+
+def fetch_json(
+    url: str,
+    timeout: int = API_TIMEOUT,
+) -> Any:
+
     request = Request(
         url,
         headers={
@@ -37,134 +90,255 @@ def fetch_json(url, timeout=60):
                 "(KHTML, like Gecko) "
                 "Chrome/140.0 Safari/537.36"
             ),
-            "Accept": "application/json,text/plain,*/*",
+            "Accept": (
+                "application/json,"
+                "text/plain,*/*"
+            ),
         },
     )
 
-    with urlopen(request, timeout=timeout) as response:
+    with urlopen(
+        request,
+        timeout=timeout,
+    ) as response:
+
         return json.loads(
             response.read().decode("utf-8")
         )
 
 
-def extract_country_code(text):
+def extract_country_code(
+    text: str,
+) -> str:
+
     match = re.match(
         r"^\s*([A-Z]{2})\s*\(",
         text or "",
     )
 
-    return match.group(1) if match else ""
+    if match:
+        return match.group(1)
+
+    return ""
 
 
-def get_country_name(code, locale, fallback):
+def get_country_name(
+    locale: Locale,
+    code: str,
+    fallback: str,
+) -> str:
+
     if not code:
         return fallback
 
     try:
-        value = locale.territories.get(code)
+        name = locale.territories.get(code)
 
-        if value:
-            return value
+        if name:
+            return name
+
     except Exception:
         pass
 
     return fallback
 
 
-def find_united_states(records):
-    for record in records:
-        if not isinstance(record, dict):
-            continue
+def convert_country(
+    record: dict[str, Any],
+) -> Country | None:
 
-        text = str(
-            record.get("text", "")
-        ).strip()
+    country_id = str(
+        record.get("id", "")
+    ).strip()
 
-        code = extract_country_code(text)
+    raw_text = str(
+        record.get("text", "")
+    ).strip()
 
-        if code == "US":
-            return record
+    if not country_id or not raw_text:
+        return None
 
-        if "UNITED STATES" in text.upper():
-            return record
+    code = extract_country_code(
+        raw_text
+    )
 
-    return None
+    if not code:
+        return None
+
+    match = re.search(
+        r"^\s*[A-Z]{2}\s*\((.*?)\)\s*$",
+        raw_text,
+    )
+
+    if match:
+        fallback_english = (
+            match.group(1).strip()
+        )
+    else:
+        fallback_english = raw_text
+
+    english_name = get_country_name(
+        ENGLISH_LOCALE,
+        code,
+        fallback_english,
+    )
+
+    khmer_name = get_country_name(
+        KHMER_LOCALE,
+        code,
+        english_name,
+    )
+
+    return Country(
+        country_id=country_id,
+        raw_text=raw_text,
+        code=code,
+        english_name=english_name,
+        khmer_name=khmer_name,
+    )
 
 
-def fetch_all_country_records():
+def fetch_all_countries() -> list[Country]:
+
+    log("")
     log("=" * 60)
-    log("FETCHING COUNTRY API")
+    log("COUNTRY DISCOVERY")
     log("=" * 60)
 
-    records = []
+    countries: list[Country] = []
 
     page_number = 1
-    last_page = None
 
     while True:
-        url = (
-            f"{COUNTRY_API}?page={page_number}"
+
+        api_url = (
+            f"{COUNTRY_API}"
+            f"?page={page_number}"
         )
 
         log(
-            f"Fetching API page {page_number}..."
+            f"Fetching country API page "
+            f"{page_number}..."
         )
 
-        data = fetch_json(url)
+        data = fetch_json(
+            api_url
+        )
 
-        page_records = data.get(
+        records = data.get(
             "data",
             [],
         )
 
+        if not isinstance(
+            records,
+            list,
+        ):
+            records = []
+
         log(
-            f"  Received {len(page_records)} records."
+            f"  Received "
+            f"{len(records)} country records."
         )
 
-        records.extend(page_records)
-
-        meta = data.get(
-            "meta",
-            {},
-        )
-
-        if isinstance(meta, dict):
-            try:
-                last_page = int(
-                    meta.get("last_page")
-                )
-            except Exception:
-                last_page = None
-
-        if last_page is not None:
-            if page_number >= last_page:
-                break
-        elif not page_records:
+        if not records:
             break
+
+        for record in records:
+
+            if not isinstance(
+                record,
+                dict,
+            ):
+                continue
+
+            country = convert_country(
+                record
+            )
+
+            if country:
+                countries.append(
+                    country
+                )
 
         page_number += 1
 
-    log(
-        f"TOTAL COUNTRY RECORDS: {len(records)}"
+    # Remove duplicate IDs while preserving order.
+    unique_countries = []
+    seen_ids = set()
+
+    for country in countries:
+
+        if country.country_id in seen_ids:
+            continue
+
+        seen_ids.add(
+            country.country_id
+        )
+
+        unique_countries.append(
+            country
+        )
+
+    countries = unique_countries
+
+    DEBUG_API.write_text(
+        json.dumps(
+            [
+                {
+                    "id": c.country_id,
+                    "raw_text": c.raw_text,
+                    "code": c.code,
+                    "english_name": c.english_name,
+                    "khmer_name": c.khmer_name,
+                }
+                for c in countries
+            ],
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
     )
 
-    return records
+    log("")
+    log(
+        f"TOTAL COUNTRIES FOUND: "
+        f"{len(countries)}"
+    )
+
+    if not countries:
+        raise RuntimeError(
+            "No countries were found."
+        )
+
+    return countries
 
 
-def find_country_select(page):
-    select = page.locator(
+# ============================================================
+# PAGE ELEMENTS
+# ============================================================
+
+def find_country_select(
+    page: Page,
+):
+
+    locator = page.locator(
         "#country_id"
     )
 
-    if select.count() == 0:
+    if locator.count() == 0:
         raise RuntimeError(
-            "Could not find #country_id"
+            "Country select #country_id "
+            "was not found."
         )
 
-    return select.first
+    return locator.first
 
 
-def find_weight_input(page):
+def find_weight_input(
+    page: Page,
+):
+
     selectors = [
         "input[name='weight']",
         "input[id='weight']",
@@ -173,49 +347,74 @@ def find_weight_input(page):
     ]
 
     for selector in selectors:
-        locator = page.locator(selector)
 
-        for i in range(locator.count()):
-            candidate = locator.nth(i)
+        locator = page.locator(
+            selector
+        )
+
+        for index in range(
+            locator.count()
+        ):
+
+            candidate = locator.nth(
+                index
+            )
 
             try:
+
                 if candidate.is_visible():
                     return candidate
+
             except Exception:
                 pass
 
     raise RuntimeError(
-        "Could not find weight input."
+        "Weight input was not found."
     )
 
 
-def find_calculate_button(page):
+def find_calculate_button(
+    page: Page,
+):
+
     candidates = page.locator(
-        "button, input[type='submit'], "
-        "input[type='button'], a"
+        "button, "
+        "input[type='submit'], "
+        "input[type='button'], "
+        "a"
     )
 
-    for i in range(candidates.count()):
-        candidate = candidates.nth(i)
+    for index in range(
+        candidates.count()
+    ):
+
+        candidate = candidates.nth(
+            index
+        )
 
         try:
+
             if not candidate.is_visible():
                 continue
 
             text = (
                 candidate.inner_text(
-                    timeout=2000
+                    timeout=2_000
                 )
                 .strip()
                 .lower()
             )
 
             value = (
-                candidate.get_attribute("value")
+                candidate.get_attribute(
+                    "value"
+                )
                 or ""
             ).strip().lower()
 
-            combined = f"{text} {value}"
+            combined = (
+                f"{text} {value}"
+            )
 
             if (
                 "calculate" in combined
@@ -227,58 +426,85 @@ def find_calculate_button(page):
             pass
 
     raise RuntimeError(
-        "Could not find Calculate button."
+        "Calculate button was not found."
     )
 
 
-def add_country_option(
-    page,
-    country_id,
-    country_text,
-):
+# ============================================================
+# SELECT2 COUNTRY SELECTION
+# ============================================================
+
+def select_country(
+    page: Page,
+    country: Country,
+) -> None:
+
+    log(
+        f"  Selecting: "
+        f"{country.display_name}"
+    )
+
     result = page.evaluate(
         """
-        ({countryId, countryText}) => {
+        ({ countryId, countryText }) => {
+
             const select =
-                document.querySelector('#country_id');
+                document.querySelector(
+                    '#country_id'
+                );
 
             if (!select) {
                 return {
                     ok: false,
-                    reason: 'select not found'
+                    reason: 'country select not found'
                 };
             }
 
+            const value =
+                String(countryId);
+
             let option =
-                Array.from(select.options).find(
-                    o => String(o.value) === String(countryId)
+                Array.from(
+                    select.options
+                ).find(
+                    opt =>
+                        String(opt.value)
+                        === value
                 );
 
             if (!option) {
+
                 option =
-                    document.createElement('option');
+                    document.createElement(
+                        'option'
+                    );
 
-                option.value =
-                    String(countryId);
-
+                option.value = value;
                 option.textContent =
                     countryText;
 
-                select.appendChild(option);
+                select.appendChild(
+                    option
+                );
             }
 
             option.selected = true;
-            select.value = String(countryId);
+            select.value = value;
 
             if (window.jQuery) {
+
                 window.jQuery(select)
-                    .val(String(countryId))
-                    .trigger("change");
+                    .val(value)
+                    .trigger('change');
+
             } else {
+
                 select.dispatchEvent(
                     new Event(
-                        "change",
-                        {bubbles: true}
+                        'change',
+                        {
+                            bubbles: true
+                        }
                     )
                 );
             }
@@ -291,189 +517,663 @@ def add_country_option(
         }
         """,
         {
-            "countryId": str(country_id),
-            "countryText": str(country_text),
+            "countryId": country.country_id,
+            "countryText": country.raw_text,
         },
     )
 
+    if not isinstance(
+        result,
+        dict,
+    ):
+        raise RuntimeError(
+            "Invalid country selection result."
+        )
+
     if not result.get("ok"):
         raise RuntimeError(
-            f"Could not select country: {result}"
+            "Could not select country: "
+            f"{result.get('reason')}"
         )
 
-    log(
-        f"Selected country value: "
-        f"{result.get('value')}"
+    selected_value = str(
+        result.get(
+            "value",
+            "",
+        )
     )
 
-
-def main():
-    log("")
-    log("=" * 60)
-    log("CAMBODIA POST SINGLE COUNTRY DIAGNOSTIC")
-    log("=" * 60)
-
-    log(
-        f"Started: "
-        f"{datetime.now(timezone.utc).isoformat()}"
-    )
-
-    records = fetch_all_country_records()
-
-    country = find_united_states(records)
-
-    if country is None:
+    if selected_value != (
+        country.country_id
+    ):
         raise RuntimeError(
-            "United States was not found in country API."
+            "Country selection verification "
+            "failed. "
+            f"Expected {country.country_id}, "
+            f"got {selected_value}"
         )
 
-    country_id = country.get("id")
-    country_text = country.get("text")
+    page.wait_for_timeout(
+        300
+    )
+
+
+# ============================================================
+# WEIGHT
+# ============================================================
+
+def set_weight(
+    page: Page,
+) -> None:
+
+    weight = find_weight_input(
+        page
+    )
+
+    weight.fill(
+        WEIGHT
+    )
+
+    actual = (
+        weight.input_value()
+        .strip()
+    )
+
+    if actual != WEIGHT:
+        raise RuntimeError(
+            "Weight verification failed. "
+            f"Expected {WEIGHT}, "
+            f"got {actual}"
+        )
+
+
+# ============================================================
+# RESULT TABLE DETECTION
+# ============================================================
+
+def get_letter_row_text(
+    page: Page,
+) -> str:
+
+    """
+    Look for the actual Letter service row
+    in the rendered result table.
+
+    We intentionally inspect table rows rather
+    than searching the entire page for the words
+    'Letter' and 'Price (KHR)'.
+    """
+
+    rows = page.locator(
+        "tr"
+    )
+
+    for index in range(
+        rows.count()
+    ):
+
+        row = rows.nth(
+            index
+        )
+
+        try:
+
+            if not row.is_visible():
+                continue
+
+            text = (
+                row.inner_text(
+                    timeout=2_000
+                )
+                .strip()
+            )
+
+            if not text:
+                continue
+
+            normalized = re.sub(
+                r"\s+",
+                " ",
+                text,
+            ).strip()
+
+            # Match a row whose first service
+            # name is Letter.
+            #
+            # Avoid matching:
+            # Letter Register
+            # Letter Register + AR
+            if re.match(
+                r"^Letter\s+",
+                normalized,
+                flags=re.IGNORECASE,
+            ):
+
+                return normalized
+
+            if normalized.lower() == "letter":
+                return normalized
+
+        except Exception:
+            continue
+
+    return ""
+
+
+def letter_row_has_price(
+    row_text: str,
+) -> bool:
+
+    if not row_text:
+        return False
+
+    # A normal result looks approximately like:
+    #
+    # Letter    3,300 ៛    19 to 26 days
+    #
+    # We therefore look for a numeric price.
+    #
+    # Accept:
+    # 3300
+    # 3,300
+    # 3 300
+    # 3300 ៛
+    # 3,300 ៛
+
+    price_pattern = re.compile(
+        r"\b\d{1,3}"
+        r"(?:[,\s]\d{3})*"
+        r"\b"
+    )
+
+    matches = price_pattern.findall(
+        row_text
+    )
+
+    if not matches:
+        return False
+
+    # Exclude the service name itself and
+    # require a plausible KHR amount.
+    for match in matches:
+
+        digits = re.sub(
+            r"\D",
+            "",
+            match,
+        )
+
+        if not digits:
+            continue
+
+        try:
+            amount = int(
+                digits
+            )
+        except ValueError:
+            continue
+
+        if amount > 0:
+            return True
+
+    return False
+
+
+def page_has_calculation_table(
+    page: Page,
+) -> bool:
+
+    row = get_letter_row_text(
+        page
+    )
+
+    return bool(row)
+
+
+# ============================================================
+# CALCULATION
+# ============================================================
+
+def click_calculate(
+    page: Page,
+) -> None:
+
+    button = find_calculate_button(
+        page
+    )
+
+    log(
+        "  Clicking Calculate..."
+    )
+
+    button.click(
+        timeout=ACTION_TIMEOUT
+    )
+
+
+def wait_for_calculation(
+    page: Page,
+) -> None:
+
+    """
+    Wait until the Letter row appears.
+
+    We don't depend on a particular AJAX response
+    URL because the website's JavaScript implementation
+    may change.
+    """
+
+    deadline = (
+        time.monotonic()
+        + RESULT_TIMEOUT / 1000
+    )
+
+    while (
+        time.monotonic()
+        < deadline
+    ):
+
+        row = get_letter_row_text(
+            page
+        )
+
+        if row:
+            return
+
+        page.wait_for_timeout(
+            250
+        )
+
+    # If the result didn't appear, leave the
+    # final decision to the caller.
+    return
+
+
+# ============================================================
+# TEST ONE COUNTRY
+# ============================================================
+
+def test_country(
+    page: Page,
+    country: Country,
+) -> tuple[bool, str]:
+
+    # --------------------------------------------------------
+    # 1. Select country
+    # --------------------------------------------------------
+
+    select_country(
+        page,
+        country,
+    )
+
+    # --------------------------------------------------------
+    # 2. Enter 0.02 kg
+    # --------------------------------------------------------
+
+    log(
+        "  Entering weight: 0.02 kg"
+    )
+
+    set_weight(
+        page
+    )
+
+    # --------------------------------------------------------
+    # 3. Click Calculate
+    # --------------------------------------------------------
+
+    click_calculate(
+        page
+    )
+
+    # --------------------------------------------------------
+    # 4. Wait for result
+    # --------------------------------------------------------
+
+    wait_for_calculation(
+        page
+    )
+
+    # --------------------------------------------------------
+    # 5. Determine Letter availability
+    # --------------------------------------------------------
+
+    letter_row = get_letter_row_text(
+        page
+    )
+
+    if not letter_row:
+
+        return (
+            True,
+            "Letter service is missing",
+        )
+
+    if not letter_row_has_price(
+        letter_row
+    ):
+
+        return (
+            True,
+            "Letter service has no KHR price",
+        )
+
+    return (
+        False,
+        f"Letter available: {letter_row}",
+    )
+
+
+# ============================================================
+# PAGE PREPARATION
+# ============================================================
+
+def prepare_page(
+    page: Page,
+) -> None:
 
     log("")
     log("=" * 60)
-    log("TEST COUNTRY")
+    log("OPENING CAMBODIA POST")
     log("=" * 60)
 
     log(
-        f"Country API ID: {country_id}"
+        f"Opening {URL}..."
+    )
+
+    page.goto(
+        URL,
+        wait_until="domcontentloaded",
+        timeout=PAGE_TIMEOUT,
     )
 
     log(
-        f"Country API text: {country_text}"
+        f"Page loaded: {page.url}"
     )
 
-    code = extract_country_code(
-        str(country_text)
+    page.wait_for_timeout(
+        3_000
     )
 
-    english_name = get_country_name(
-        code,
-        ENGLISH_LOCALE,
-        str(country_text),
-    )
-
-    khmer_name = get_country_name(
-        code,
-        KHMER_LOCALE,
-        english_name,
+    find_country_select(
+        page
     )
 
     log(
-        f"English name: {english_name}"
+        "Country select found."
+    )
+
+    find_weight_input(
+        page
     )
 
     log(
-        f"Khmer name: {khmer_name}"
+        "Weight input found."
     )
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-            ],
-        )
+    find_calculate_button(
+        page
+    )
 
-        context = browser.new_context(
-            viewport={
-                "width": 1440,
-                "height": 1000,
-            }
-        )
+    log(
+        "Calculate button found."
+    )
 
-        page = context.new_page()
 
-        page.set_default_timeout(15000)
+# ============================================================
+# TEST ALL COUNTRIES
+# ============================================================
 
-        log("")
-        log("=" * 60)
-        log("OPENING CAMBODIA POST")
-        log("=" * 60)
+def test_all_countries(
+    page: Page,
+    countries: list[Country],
+) -> list[Country]:
 
-        page.goto(
-            URL,
-            wait_until="domcontentloaded",
-            timeout=60000,
-        )
+    suspended: list[Country] = []
 
-        log(
-            f"Loaded: {page.url}"
-        )
+    log("")
+    log("=" * 60)
+    log("TESTING COUNTRIES")
+    log("=" * 60)
 
-        page.wait_for_timeout(3000)
+    log(
+        f"Total countries: "
+        f"{len(countries)}"
+    )
 
-        log("")
-        log("Adding United States to Select2...")
+    log(
+        f"Weight: {WEIGHT} kg"
+    )
 
-        add_country_option(
-            page,
-            country_id,
-            country_text,
-        )
-
-        weight = find_weight_input(page)
-
-        log(
-            "Entering weight: 0.02 kg"
-        )
-
-        weight.fill(
-            WEIGHT
-        )
-
-        log(
-            f"Weight value now: "
-            f"{weight.input_value()}"
-        )
-
-        calculate = find_calculate_button(page)
+    for index, country in enumerate(
+        countries,
+        start=1,
+    ):
 
         log("")
         log(
-            "CLICKING CALCULATE..."
+            f"[{index}/{len(countries)}] "
+            f"Testing: "
+            f"{country.display_name}"
         )
 
-        calculate.click()
+        try:
 
-        log(
-            "Calculate clicked."
+            is_suspended, reason = (
+                test_country(
+                    page,
+                    country,
+                )
+            )
+
+            if is_suspended:
+
+                suspended.append(
+                    country
+                )
+
+                log(
+                    f"  -> SUSPENDED: "
+                    f"{reason}"
+                )
+
+            else:
+
+                log(
+                    f"  -> AVAILABLE: "
+                    f"{reason}"
+                )
+
+        except PlaywrightTimeoutError as exc:
+
+            suspended.append(
+                country
+            )
+
+            log(
+                "  -> TECHNICAL ERROR: "
+                f"{exc}"
+            )
+
+        except Exception as exc:
+
+            suspended.append(
+                country
+            )
+
+            log(
+                "  -> TECHNICAL ERROR: "
+                f"{type(exc).__name__}: "
+                f"{exc}"
+            )
+
+        page.wait_for_timeout(
+            200
         )
 
-        log("")
-        log(
-            "Waiting 5 seconds for result..."
+    return suspended
+
+
+# ============================================================
+# OUTPUT FILE
+# ============================================================
+
+def write_output(
+    countries: list[Country],
+    suspended: list[Country],
+) -> None:
+
+    timestamp = datetime.now(
+        timezone.utc
+    ).strftime(
+        "%Y-%m-%d %H:%M:%S UTC"
+    )
+
+    suspended_ids = {
+        country.country_id
+        for country in suspended
+    }
+
+    lines: list[str] = []
+
+    lines.append(
+        "CAMBODIA POST INTERNATIONAL SHIPPING MONITOR"
+    )
+
+    lines.append(
+        f"Last checked: {timestamp}"
+    )
+
+    lines.append(
+        f"Weight tested: {WEIGHT} kg"
+    )
+
+    lines.append("")
+
+    # --------------------------------------------------------
+    # COUNTRY LIST
+    # --------------------------------------------------------
+
+    lines.append(
+        "============================================================"
+    )
+
+    lines.append(
+        f"COUNTRY LIST ({len(countries)} countries)"
+    )
+
+    lines.append(
+        "============================================================"
+    )
+
+    for index, country in enumerate(
+        countries,
+        start=1,
+    ):
+
+        status = ""
+
+        if country.country_id in suspended_ids:
+            status = " — SUSPENDED"
+
+        lines.append(
+            f"{index}. "
+            f"{country.khmer_name} — "
+            f"{country.english_name}"
+            f"{status}"
         )
 
-        page.wait_for_timeout(5000)
+    lines.append("")
 
-        log("")
-        log("=" * 60)
-        log("PAGE TEXT AFTER CALCULATION")
-        log("=" * 60)
+    # --------------------------------------------------------
+    # SUSPENDED LIST
+    # --------------------------------------------------------
 
-        text = page.locator(
-            "body"
-        ).inner_text()
+    lines.append(
+        "============================================================"
+    )
 
-        print(text, flush=True)
+    lines.append(
+        f"SUSPENDED DESTINATIONS ({len(suspended)})"
+    )
 
-        log("")
-        log("=" * 60)
-        log("HTML AFTER CALCULATION")
-        log("=" * 60)
+    lines.append(
+        "============================================================"
+    )
 
-        html = page.content()
+    if suspended:
+
+        for index, country in enumerate(
+            suspended,
+            start=1,
+        ):
+
+            lines.append(
+                f"{index}. "
+                f"{country.khmer_name} — "
+                f"{country.english_name}"
+            )
+
+    else:
+
+        lines.append(
+            "None"
+        )
+
+    lines.append("")
+
+    OUTPUT_FILE.write_text(
+        "\n".join(lines),
+        encoding="utf-8",
+    )
+
+    log("")
+    log("=" * 60)
+    log("OUTPUT CREATED")
+    log("=" * 60)
+
+    log(
+        f"File: {OUTPUT_FILE}"
+    )
+
+    log(
+        f"Countries: {len(countries)}"
+    )
+
+    log(
+        f"Suspended: {len(suspended)}"
+    )
+
+
+# ============================================================
+# DEBUG
+# ============================================================
+
+def save_debug(
+    page: Page,
+) -> None:
+
+    try:
 
         DEBUG_HTML.write_text(
-            html,
+            page.content(),
             encoding="utf-8",
         )
 
         log(
-            f"Saved HTML: {DEBUG_HTML}"
+            f"Saved debug HTML: "
+            f"{DEBUG_HTML}"
         )
+
+    except Exception as exc:
+
+        log(
+            f"Could not save debug HTML: "
+            f"{exc}"
+        )
+
+    try:
 
         page.screenshot(
             path=str(DEBUG_PNG),
@@ -481,30 +1181,169 @@ def main():
         )
 
         log(
-            f"Saved screenshot: {DEBUG_PNG}"
+            f"Saved debug screenshot: "
+            f"{DEBUG_PNG}"
         )
 
-        DEBUG_API.write_text(
-            json.dumps(
-                country,
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+    except Exception as exc:
 
         log(
-            f"Saved country API record: {DEBUG_API}"
+            f"Could not save screenshot: "
+            f"{exc}"
         )
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+def main() -> int:
+
+    log("")
+    log("=" * 60)
+    log("CAMBODIA POST INTERNATIONAL SHIPPING MONITOR")
+    log("=" * 60)
+
+    log(
+        f"Started: "
+        f"{datetime.now(timezone.utc).isoformat()}"
+    )
+
+    try:
+
+        # ----------------------------------------------------
+        # STEP 1
+        # ----------------------------------------------------
+
+        log("")
+        log(
+            "Step 1: Discovering all countries..."
+        )
+
+        countries = fetch_all_countries()
+
+        # ----------------------------------------------------
+        # STEP 2
+        # ----------------------------------------------------
+
+        log("")
+        log(
+            "Step 2: Starting Chromium..."
+        )
+
+        with sync_playwright() as playwright:
+
+            browser = playwright.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                ],
+            )
+
+            context = browser.new_context(
+                viewport={
+                    "width": 1440,
+                    "height": 1000,
+                },
+                locale="en-US",
+            )
+
+            page = context.new_page()
+
+            page.set_default_timeout(
+                ACTION_TIMEOUT
+            )
+
+            try:
+
+                # ------------------------------------------------
+                # STEP 3
+                # ------------------------------------------------
+
+                prepare_page(
+                    page
+                )
+
+                # ------------------------------------------------
+                # STEP 4
+                # ------------------------------------------------
+
+                log("")
+                log(
+                    "Step 3: Testing every country..."
+                )
+
+                suspended = (
+                    test_all_countries(
+                        page,
+                        countries,
+                    )
+                )
+
+                # ------------------------------------------------
+                # STEP 5
+                # ------------------------------------------------
+
+                log("")
+                log(
+                    "Step 4: Writing output..."
+                )
+
+                write_output(
+                    countries,
+                    suspended,
+                )
+
+            except Exception as exc:
+
+                log("")
+                log("=" * 60)
+                log("MONITOR FAILED")
+                log("=" * 60)
+
+                log(
+                    f"{type(exc).__name__}: "
+                    f"{exc}"
+                )
+
+                save_debug(
+                    page
+                )
+
+                raise
+
+            finally:
+
+                context.close()
+                browser.close()
 
         log("")
         log("=" * 60)
-        log("DIAGNOSTIC COMPLETE")
+        log("MONITOR FINISHED SUCCESSFULLY")
         log("=" * 60)
 
-        context.close()
-        browser.close()
+        return 0
 
+    except Exception as exc:
+
+        log("")
+        log("=" * 60)
+        log("FATAL ERROR")
+        log("=" * 60)
+
+        log(
+            f"{type(exc).__name__}: "
+            f"{exc}"
+        )
+
+        return 1
+
+
+# ============================================================
+# PROGRAM ENTRY POINT
+# ============================================================
 
 if __name__ == "__main__":
     sys.exit(main())

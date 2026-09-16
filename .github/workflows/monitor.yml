@@ -2,9 +2,7 @@ name: Monitor Cambodia Post
 
 on:
   schedule:
-    # Runs every day at 08:00 UTC.
     - cron: "0 8 * * *"
-
   workflow_dispatch:
 
 permissions:
@@ -13,7 +11,6 @@ permissions:
 jobs:
   monitor:
     runs-on: ubuntu-latest
-
     timeout-minutes: 30
 
     steps:
@@ -30,28 +27,162 @@ jobs:
 
       - name: Install Python dependencies
         run: |
+          echo "========================================"
+          echo "INSTALLING PYTHON DEPENDENCIES"
+          echo "========================================"
+
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
       - name: Install Playwright Chromium
         run: |
+          echo "========================================"
+          echo "INSTALLING PLAYWRIGHT CHROMIUM"
+          echo "========================================"
+
           python -m playwright install --with-deps chromium
+
+      - name: Verify monitor files
+        run: |
+          echo "========================================"
+          echo "VERIFYING MONITOR FILES"
+          echo "========================================"
+
+          echo "Current directory:"
+          pwd
+
+          echo ""
+          echo "Repository files:"
+          ls -la
+
+          echo ""
+          echo "monitor_cambodia.py:"
+          if [ -f monitor_cambodia.py ]; then
+            echo "FOUND monitor_cambodia.py"
+            echo "File size:"
+            wc -c monitor_cambodia.py
+            echo "First 20 lines:"
+            head -n 20 monitor_cambodia.py
+          else
+            echo "ERROR: monitor_cambodia.py NOT FOUND"
+            exit 1
+          fi
+
+          echo ""
+          echo "requirements.txt:"
+          if [ -f requirements.txt ]; then
+            cat requirements.txt
+          else
+            echo "ERROR: requirements.txt NOT FOUND"
+            exit 1
+          fi
+
+      - name: Test Python script syntax
+        run: |
+          echo "========================================"
+          echo "TESTING PYTHON SCRIPT SYNTAX"
+          echo "========================================"
+
+          python -m py_compile monitor_cambodia.py
+
+          echo "Python syntax check PASSED."
 
       - name: Run Cambodia Post monitor
         run: |
-          python monitor_cambodia.py
+          echo "========================================"
+          echo "CAMBODIA POST INTERNATIONAL SHIPPING MONITOR"
+          echo "========================================"
+
+          echo "Starting monitor..."
+          echo "Time:"
+          date
+
+          echo ""
+          echo "Python version:"
+          python --version
+
+          echo ""
+          echo "Running monitor_cambodia.py..."
+          echo "----------------------------------------"
+
+          python -u monitor_cambodia.py
+
+          EXIT_CODE=$?
+
+          echo "----------------------------------------"
+          echo "monitor_cambodia.py finished."
+          echo "Exit code: $EXIT_CODE"
+          echo "Time:"
+          date
+
+          exit $EXIT_CODE
 
       - name: Show generated output
+        if: always()
         run: |
           echo "========================================"
-          echo "Generated output_cambodia.txt"
+          echo "OUTPUT FILE CHECK"
           echo "========================================"
-          cat output_cambodia.txt
+
+          if [ -f output_cambodia.txt ]; then
+            echo "output_cambodia.txt WAS CREATED."
+            echo ""
+            echo "File size:"
+            wc -c output_cambodia.txt
+            echo ""
+            echo "Contents:"
+            cat output_cambodia.txt
+          else
+            echo "output_cambodia.txt was NOT created."
+          fi
+
+      - name: Show debug files
+        if: always()
+        run: |
+          echo "========================================"
+          echo "DEBUG FILE CHECK"
+          echo "========================================"
+
+          echo "Repository files after monitor:"
+          ls -lah
+
+          echo ""
+          echo "Looking for debug files..."
+
+          for file in \
+            debug_cambodiapost.html \
+            debug_cambodiapost.png \
+            debug_cambodiapost_api.json
+          do
+            if [ -f "$file" ]; then
+              echo "FOUND: $file"
+              ls -lh "$file"
+            else
+              echo "NOT FOUND: $file"
+            fi
+          done
+
+      - name: Upload diagnostics if monitor fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cambodiapost-debug
+          path: |
+            debug_cambodiapost.html
+            debug_cambodiapost.png
+            debug_cambodiapost_api.json
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Commit changed output file
+        if: success()
         run: |
+          echo "========================================"
+          echo "COMMITTING OUTPUT"
+          echo "========================================"
+
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+users.noreply.github.com"
 
           git add output_cambodia.txt
 

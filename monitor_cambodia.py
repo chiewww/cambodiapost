@@ -1,12 +1,8 @@
 import re
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from playwright.sync_api import (
-    TimeoutError as PlaywrightTimeoutError,
-    sync_playwright,
-)
+from playwright.sync_api import sync_playwright
 
 
 URL = "https://www.cambodiapost.com.kh/calculate/international"
@@ -14,63 +10,137 @@ OUTPUT_FILE = Path("output_cambodia.txt")
 
 WEIGHT = "0.02"
 
-# The website filters the country list when text is typed.
-# Searching A-Z lets us discover the complete list without
-# depending on the dropdown being open initially.
-SEARCH_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
 PAGE_TIMEOUT = 60_000
-SHORT_TIMEOUT = 5_000
-RESULT_TIMEOUT = 20_000
+RESULT_TIMEOUT = 30_000
+
+# The website's country control is currently represented as a Select
+# control in the rendered page.  We still support autocomplete/combobox
+# controls because the implementation may change.
+COUNTRY_SEARCH_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
 def clean_text(text):
-    """Normalize whitespace."""
     return re.sub(r"\s+", " ", text or "").strip()
 
 
-def visible_texts(locator):
-    """Return cleaned text for visible elements represented by a locator."""
-    results = []
+def visible(locator):
+    try:
+        return locator.is_visible()
+    except Exception:
+        return False
+
+
+def get_body_text(page):
+    try:
+        return clean_text(page.locator("body").inner_text())
+    except Exception:
+        return ""
+
+
+def save_diagnostics(page, reason):
+    """
+    Save diagnostic files inside the GitHub Actions workspace.
+
+    These are useful if Cambodia Post changes its page structure.
+    They are intentionally not committed to the repository.
+    """
+    try:
+        Path("debug_cambodiapost.html").write_text(
+            page.content(),
+            encoding="utf-8",
+        )
+    except Exception as exc:
+        print(f"Could not save HTML diagnostic: {exc}")
 
     try:
-        count = locator.count()
+        page.screenshot(
+            path="debug_cambodiapost.png",
+            full_page=True,
+        )
+    except Exception as exc:
+        print(f"Could not save screenshot diagnostic: {exc}")
+
+    print(f"Diagnostic information saved because: {reason}")
+
+
+# ---------------------------------------------------------------------
+# COUNTRY CONTROL
+# ---------------------------------------------------------------------
+
+def find_country_select(page):
+    """
+    Look for a native HTML select associated with Country.
+    """
+
+    selects = page.locator("select:visible")
+
+    try:
+        count = selects.count()
     except Exception:
-        return results
+        return None
 
     for i in range(count):
+        select = selects.nth(i)
+
         try:
-            item = locator.nth(i)
+            name = clean_text(
+                select.get_attribute("name") or ""
+            ).lower()
 
-            if not item.is_visible():
-                continue
+            element_id = clean_text(
+                select.get_attribute("id") or ""
+            ).lower()
 
-            text = clean_text(item.inner_text())
+            aria = clean_text(
+                select.get_attribute("aria-label") or ""
+            ).lower()
 
-            if text:
-                results.append(text)
+            title = clean_text(
+                select.get_attribute("title") or ""
+            ).lower()
+
+            combined = (
+                f"{name} {element_id} "
+                f"{aria} {title}"
+            )
+
+            if "country" in combined:
+                return select
+
+            # Inspect the parent text.
+            parent_text = clean_text(
+                select.locator("xpath=..").inner_text()
+            ).lower()
+
+            if "country" in parent_text:
+                return select
+
         except Exception:
             continue
 
-    return results
+    # If there is only one visible select on this page,
+    # it is very likely the country selector.
+    try:
+        if count == 1:
+            return selects.first
+    except Exception:
+        pass
+
+    return None
 
 
-def find_country_input(page):
+def find_country_combobox(page):
     """
-    Find the input used for the Country autocomplete/search field.
-
-    The Cambodia Post page is dynamically generated, so we deliberately
-    try several reasonable selectors rather than depending on one
-    CSS class that could change.
+    Find a custom Country combobox/autocomplete control.
     """
 
     selectors = [
-        'input[placeholder*="Country" i]',
-        'input[placeholder*="country" i]',
-        'input[aria-label*="Country" i]',
-        'input[name*="country" i]',
-        'input[id*="country" i]',
-        'input[formcontrolname*="country" i]',
+        '[role="combobox"]:visible',
+        'input[placeholder*="Country" i]:visible',
+        'input[aria-label*="Country" i]:visible',
+        'input[name*="country" i]:visible',
+        'input[id*="country" i]:visible',
+        '[class*="country" i] input:visible',
     ]
 
     for selector in selectors:
@@ -78,159 +148,160 @@ def find_country_input(page):
 
         try:
             count = locator.count()
-
-            for i in range(count):
-                candidate = locator.nth(i)
-
-                if candidate.is_visible():
-                    return candidate
         except Exception:
-            pass
-
-    # Fallback: inspect visible text inputs.
-    inputs = page.locator("input:visible")
-
-    try:
-        count = inputs.count()
+            continue
 
         for i in range(count):
-            candidate = inputs.nth(i)
+            candidate = locator.nth(i)
+
+            if not visible(candidate):
+                continue
 
             try:
-                placeholder = clean_text(
-                    candidate.get_attribute("placeholder") or ""
-                )
-                aria_label = clean_text(
-                    candidate.get_attribute("aria-label") or ""
-                )
-                name = clean_text(
-                    candidate.get_attribute("name") or ""
-                )
-                element_id = clean_text(
-                    candidate.get_attribute("id") or ""
-                )
-
-                combined = (
-                    f"{placeholder} {aria_label} "
-                    f"{name} {element_id}"
+                attributes = " ".join(
+                    [
+                        candidate.get_attribute("name") or "",
+                        candidate.get_attribute("id") or "",
+                        candidate.get_attribute("placeholder") or "",
+                        candidate.get_attribute("aria-label") or "",
+                    ]
                 ).lower()
 
-                if "country" in combined:
+                if "country" in attributes:
                     return candidate
             except Exception:
-                continue
-    except Exception:
-        pass
+                pass
+
+            # For role=combobox, the surrounding label may identify it.
+            try:
+                parent_text = clean_text(
+                    candidate.locator("xpath=..").inner_text()
+                ).lower()
+
+                if "country" in parent_text:
+                    return candidate
+            except Exception:
+                pass
+
+    return None
+
+
+def find_country_control(page):
+    """
+    Return either a native select or a custom combobox.
+    """
+
+    select = find_country_select(page)
+
+    if select is not None:
+        print("Country control detected as a native SELECT.")
+        return "select", select
+
+    combobox = find_country_combobox(page)
+
+    if combobox is not None:
+        print("Country control detected as a COMBOBOX.")
+        return "combobox", combobox
+
+    # Last-resort inspection of all visible select/combobox elements.
+    print("Could not identify Country control by attributes.")
+    print("Visible SELECT count:", page.locator("select:visible").count())
+    print(
+        "Visible COMBOBOX count:",
+        page.locator('[role="combobox"]:visible').count(),
+    )
+
+    save_diagnostics(
+        page,
+        "Country control could not be identified",
+    )
 
     raise RuntimeError(
-        "Could not find the Country input field."
+        "Could not find the Country control."
     )
 
 
-def find_weight_input(page):
-    """Find the Weight(kg) input."""
+# ---------------------------------------------------------------------
+# COUNTRY DISCOVERY
+# ---------------------------------------------------------------------
 
-    selectors = [
-        'input[placeholder*="Weight" i]',
-        'input[aria-label*="Weight" i]',
-        'input[name*="weight" i]',
-        'input[id*="weight" i]',
-        'input[formcontrolname*="weight" i]',
-        'input[type="number"]',
-    ]
+def countries_from_native_select(select):
+    """
+    Get all countries directly from a native SELECT.
 
-    for selector in selectors:
-        locator = page.locator(selector)
+    This is the preferred method because it gives us the complete
+    list without having to type A-Z.
+    """
+
+    countries = []
+
+    try:
+        options = select.locator("option")
+        count = options.count()
+    except Exception:
+        return countries
+
+    for i in range(count):
+        option = options.nth(i)
 
         try:
-            count = locator.count()
+            text = clean_text(option.inner_text())
+            value = clean_text(
+                option.get_attribute("value") or ""
+            )
 
-            for i in range(count):
-                candidate = locator.nth(i)
-
-                if candidate.is_visible():
-                    return candidate
-        except Exception:
-            pass
-
-    # Fallback: visible inputs other than the country field.
-    inputs = page.locator("input:visible")
-
-    try:
-        count = inputs.count()
-
-        for i in range(count):
-            candidate = inputs.nth(i)
-
-            try:
-                input_type = (
-                    candidate.get_attribute("type") or ""
-                ).lower()
-
-                placeholder = clean_text(
-                    candidate.get_attribute("placeholder") or ""
-                ).lower()
-
-                aria_label = clean_text(
-                    candidate.get_attribute("aria-label") or ""
-                ).lower()
-
-                name = clean_text(
-                    candidate.get_attribute("name") or ""
-                ).lower()
-
-                combined = (
-                    f"{input_type} {placeholder} "
-                    f"{aria_label} {name}"
-                )
-
-                if "weight" in combined or input_type == "number":
-                    return candidate
-            except Exception:
+            if not text:
                 continue
-    except Exception:
-        pass
 
-    raise RuntimeError(
-        "Could not find the Weight input field."
-    )
+            lower = text.casefold()
+
+            ignored = {
+                "country",
+                "select",
+                "select country",
+                "please select",
+                "please select country",
+            }
+
+            if lower in ignored:
+                continue
+
+            # Skip placeholder options.
+            if not value and lower in ignored:
+                continue
+
+            countries.append(text)
+        except Exception:
+            continue
+
+    # Remove duplicates while preserving order.
+    unique = []
+    seen = set()
+
+    for country in countries:
+        key = country.casefold()
+
+        if key not in seen:
+            seen.add(key)
+            unique.append(country)
+
+    unique.sort(key=str.casefold)
+
+    return unique
 
 
-def click_country_control(page):
+def get_visible_options(page):
     """
-    Click the Country control to open its dropdown/autocomplete.
-
-    The input itself may be the control, but clicking it is harmless
-    when it is an autocomplete input.
-    """
-
-    country_input = find_country_input(page)
-
-    try:
-        country_input.click()
-    except Exception:
-        country_input.focus()
-
-    page.wait_for_timeout(500)
-
-    return country_input
-
-
-def get_dropdown_options(page):
-    """
-    Collect visible dropdown option text.
-
-    We intentionally inspect several common autocomplete/option
-    structures because the site's frontend implementation may change.
+    Return text from visible autocomplete options.
     """
 
     selectors = [
         '[role="option"]:visible',
-        '.dropdown-item:visible',
-        '.select2-results__option:visible',
-        '.ng-option:visible',
-        'mat-option:visible',
-        'li:visible',
+        ".ng-option:visible",
+        ".dropdown-item:visible",
+        ".select2-results__option:visible",
+        "mat-option:visible",
+        "li:visible",
     ]
 
     found = []
@@ -240,199 +311,238 @@ def get_dropdown_options(page):
 
         try:
             count = locator.count()
-
-            for i in range(count):
-                item = locator.nth(i)
-
-                try:
-                    if not item.is_visible():
-                        continue
-
-                    text = clean_text(item.inner_text())
-
-                    if not text:
-                        continue
-
-                    # Ignore obvious non-country UI entries.
-                    lowered = text.lower()
-
-                    ignored = {
-                        "country",
-                        "select",
-                        "select country",
-                        "no results found",
-                        "loading...",
-                    }
-
-                    if lowered in ignored:
-                        continue
-
-                    found.append(text)
-                except Exception:
-                    continue
         except Exception:
             continue
-
-    # Preserve order while removing duplicates.
-    unique = []
-    seen = set()
-
-    for text in found:
-        key = text.casefold()
-
-        if key not in seen:
-            seen.add(key)
-            unique.append(text)
-
-    return unique
-
-
-def discover_countries(page):
-    """
-    Discover all country names by searching each alphabet letter.
-
-    This follows the website behavior described by the user:
-    countries appear after text is entered into the Country field.
-    """
-
-    country_input = find_country_input(page)
-
-    all_countries = {}
-    successful_searches = 0
-
-    for letter in SEARCH_LETTERS:
-        try:
-            # Make sure the autocomplete is active.
-            country_input.click()
-
-            # Clear the previous search.
-            country_input.fill("")
-
-            # Type one letter.
-            country_input.fill(letter)
-
-            # Give the frontend time to filter/render.
-            page.wait_for_timeout(700)
-
-            # Wait briefly for an option if one exists.
-            try:
-                page.locator('[role="option"]:visible').first.wait_for(
-                    state="visible",
-                    timeout=2_000,
-                )
-            except Exception:
-                pass
-
-            options = get_dropdown_options(page)
-
-            for country in options:
-                all_countries[country.casefold()] = country
-
-            if options:
-                successful_searches += 1
-
-        except Exception as exc:
-            print(
-                f"Warning: country search '{letter}' failed: {exc}"
-            )
-
-    # Clear the search field at the end.
-    try:
-        country_input.fill("")
-        page.keyboard.press("Escape")
-    except Exception:
-        pass
-
-    countries = list(all_countries.values())
-
-    # Sort alphabetically, case-insensitively.
-    countries.sort(key=lambda x: x.casefold())
-
-    if not countries:
-        raise RuntimeError(
-            "No countries were discovered. "
-            "The Country control or its autocomplete behavior "
-            "may have changed."
-        )
-
-    print(
-        f"Discovered {len(countries)} countries "
-        f"from {successful_searches} alphabet searches."
-    )
-
-    return countries
-
-
-def select_country(page, country):
-    """
-    Select a country from the autocomplete/dropdown.
-    """
-
-    country_input = find_country_input(page)
-
-    # Open the autocomplete.
-    country_input.click()
-
-    # Search using the complete country name.
-    country_input.fill(country)
-
-    page.wait_for_timeout(700)
-
-    # Try exact accessible option first.
-    exact_selectors = [
-        '[role="option"]:visible',
-        '.dropdown-item:visible',
-        '.select2-results__option:visible',
-        '.ng-option:visible',
-        'mat-option:visible',
-    ]
-
-    for selector in exact_selectors:
-        locator = page.locator(selector)
-
-        try:
-            count = locator.count()
-
-            for i in range(count):
-                option = locator.nth(i)
-
-                if not option.is_visible():
-                    continue
-
-                text = clean_text(option.inner_text())
-
-                if text.casefold() == country.casefold():
-                    option.click()
-                    page.wait_for_timeout(300)
-                    return
-        except Exception:
-            continue
-
-    # Fallback: use keyboard selection after typing.
-    try:
-        country_input.press("ArrowDown")
-        country_input.press("Enter")
-        page.wait_for_timeout(300)
-        return
-    except Exception:
-        pass
-
-    # Last fallback: click visible text.
-    try:
-        locator = page.get_by_text(
-            country,
-            exact=True,
-        )
-
-        count = locator.count()
 
         for i in range(count):
             item = locator.nth(i)
 
-            if item.is_visible():
-                item.click()
-                page.wait_for_timeout(300)
+            if not visible(item):
+                continue
+
+            try:
+                text = clean_text(item.inner_text())
+            except Exception:
+                continue
+
+            if not text:
+                continue
+
+            lowered = text.casefold()
+
+            if lowered in {
+                "country",
+                "select",
+                "select country",
+                "no results found",
+                "loading...",
+            }:
+                continue
+
+            found.append(text)
+
+    unique = []
+    seen = set()
+
+    for item in found:
+        key = item.casefold()
+
+        if key not in seen:
+            seen.add(key)
+            unique.append(item)
+
+    return unique
+
+
+def discover_countries_from_combobox(page, combobox):
+    """
+    Discover countries from a custom autocomplete control.
+
+    Search A-Z because the website behavior described by the user
+    filters countries based on entered letters.
+    """
+
+    found = {}
+
+    for letter in COUNTRY_SEARCH_LETTERS:
+        print(f"Searching Country with: {letter}")
+
+        try:
+            combobox.click()
+
+            # Clear existing text.
+            try:
+                combobox.fill("")
+            except Exception:
+                combobox.press("Control+A")
+                combobox.press("Backspace")
+
+            combobox.fill(letter)
+
+            page.wait_for_timeout(800)
+
+            options = get_visible_options(page)
+
+            for country in options:
+                found[country.casefold()] = country
+
+        except Exception as exc:
+            print(
+                f"Warning: search {letter} failed: {exc}"
+            )
+
+    countries = list(found.values())
+    countries.sort(key=str.casefold)
+
+    return countries
+
+
+def discover_countries(page):
+    """
+    Discover the complete country list.
+    """
+
+    control_type, control = find_country_control(page)
+
+    if control_type == "select":
+        countries = countries_from_native_select(control)
+
+        print(
+            f"Found {len(countries)} countries in SELECT."
+        )
+
+    else:
+        countries = discover_countries_from_combobox(
+            page,
+            control,
+        )
+
+        print(
+            f"Found {len(countries)} countries "
+            f"through autocomplete."
+        )
+
+    if not countries:
+        save_diagnostics(
+            page,
+            "Country control was found but no countries were discovered",
+        )
+
+        raise RuntimeError(
+            "Country control was found, but no countries "
+            "were discovered."
+        )
+
+    return countries
+
+
+# ---------------------------------------------------------------------
+# COUNTRY SELECTION
+# ---------------------------------------------------------------------
+
+def select_country(page, country):
+    """
+    Select exactly one country.
+    """
+
+    control_type, control = find_country_control(page)
+
+    if control_type == "select":
+        print(f"Selecting country with SELECT: {country}")
+
+        # Try selecting by visible label first.
+        try:
+            control.select_option(label=country)
+            page.wait_for_timeout(400)
+            return
+        except Exception:
+            pass
+
+        # Some sites have duplicated/modified labels.
+        options = control.locator("option")
+
+        try:
+            count = options.count()
+        except Exception:
+            count = 0
+
+        for i in range(count):
+            option = options.nth(i)
+
+            try:
+                text = clean_text(option.inner_text())
+
+                if text.casefold() == country.casefold():
+                    value = option.get_attribute("value")
+
+                    control.select_option(
+                        value=value
+                    )
+
+                    page.wait_for_timeout(400)
+                    return
+            except Exception:
+                continue
+
+        raise RuntimeError(
+            f"Could not select country from SELECT: {country}"
+        )
+
+    # Custom autocomplete.
+    print(
+        f"Selecting country with COMBOBOX: {country}"
+    )
+
+    control.click()
+
+    try:
+        control.fill(country)
+    except Exception:
+        control.press("Control+A")
+        control.press("Backspace")
+        control.type(country)
+
+    page.wait_for_timeout(800)
+
+    # Look for exact matching option.
+    selectors = [
+        '[role="option"]:visible',
+        ".ng-option:visible",
+        ".dropdown-item:visible",
+        ".select2-results__option:visible",
+        "mat-option:visible",
+    ]
+
+    for selector in selectors:
+        locator = page.locator(selector)
+
+        try:
+            count = locator.count()
+        except Exception:
+            continue
+
+        for i in range(count):
+            option = locator.nth(i)
+
+            if not visible(option):
+                continue
+
+            try:
+                text = clean_text(option.inner_text())
+            except Exception:
+                continue
+
+            if text.casefold() == country.casefold():
+                option.click()
+                page.wait_for_timeout(400)
                 return
+
+    # Keyboard fallback.
+    try:
+        control.press("ArrowDown")
+        control.press("Enter")
+        page.wait_for_timeout(400)
+        return
     except Exception:
         pass
 
@@ -441,107 +551,219 @@ def select_country(page, country):
     )
 
 
-def set_weight(page):
-    """Enter exactly 0.02 kg."""
+# ---------------------------------------------------------------------
+# WEIGHT
+# ---------------------------------------------------------------------
 
+def find_weight_input(page):
+    """
+    Find the Weight field.
+    """
+
+    selectors = [
+        'input[placeholder*="Weight" i]:visible',
+        'input[aria-label*="Weight" i]:visible',
+        'input[name*="weight" i]:visible',
+        'input[id*="weight" i]:visible',
+        'input[formcontrolname*="weight" i]:visible',
+        'input[type="number"]:visible',
+    ]
+
+    for selector in selectors:
+        locator = page.locator(selector)
+
+        try:
+            count = locator.count()
+        except Exception:
+            continue
+
+        for i in range(count):
+            candidate = locator.nth(i)
+
+            if not visible(candidate):
+                continue
+
+            try:
+                attributes = " ".join(
+                    [
+                        candidate.get_attribute("name") or "",
+                        candidate.get_attribute("id") or "",
+                        candidate.get_attribute("placeholder") or "",
+                        candidate.get_attribute("aria-label") or "",
+                    ]
+                ).lower()
+
+                if (
+                    "weight" in attributes
+                    or "kg" in attributes
+                ):
+                    return candidate
+            except Exception:
+                continue
+
+    # The current page exposes one obvious weight input.
+    inputs = page.locator("input:visible")
+
+    try:
+        count = inputs.count()
+    except Exception:
+        count = 0
+
+    candidates = []
+
+    for i in range(count):
+        candidate = inputs.nth(i)
+
+        try:
+            input_type = (
+                candidate.get_attribute("type") or ""
+            ).lower()
+
+            placeholder = (
+                candidate.get_attribute("placeholder")
+                or ""
+            ).lower()
+
+            if (
+                input_type == "number"
+                or "weight" in placeholder
+                or "kg" in placeholder
+            ):
+                candidates.append(candidate)
+        except Exception:
+            continue
+
+    if candidates:
+        return candidates[-1]
+
+    raise RuntimeError(
+        "Could not find the Weight input field."
+    )
+
+
+def set_weight(page):
     weight_input = find_weight_input(page)
 
+    print(f"Entering weight: {WEIGHT}")
+
     weight_input.click()
-    weight_input.fill("")
     weight_input.fill(WEIGHT)
 
-    # Blur the field so any Angular/React/Vue change handler fires.
+    # Trigger blur/change handlers.
     try:
         weight_input.press("Tab")
     except Exception:
-        page.mouse.click(10, 10)
+        pass
 
     page.wait_for_timeout(300)
 
 
-def find_calculate_button(page):
-    """Find the Calculate button."""
+# ---------------------------------------------------------------------
+# CALCULATE
+# ---------------------------------------------------------------------
 
-    # English text.
-    candidates = [
-        page.get_by_role(
-            "button",
-            name=re.compile(r"calculate", re.I),
-        ),
-        page.get_by_text(
-            re.compile(r"calculate", re.I),
-            exact=False,
-        ),
+def find_calculate_button(page):
+    """
+    Find the Calculate button.
+
+    The current rendered page exposes the button through its
+    Khmer label rather than necessarily through the English word.
+    """
+
+    # Try English and Khmer accessible names.
+    patterns = [
+        re.compile(r"calculate", re.IGNORECASE),
+        re.compile(r"គណនា"),
     ]
 
-    # Khmer text visible on the current page is also accepted.
-    candidates.append(
-        page.get_by_role(
-            "button",
-            name=re.compile(r"គណនា"),
-        )
-    )
-
-    for locator in candidates:
+    for pattern in patterns:
         try:
+            locator = page.get_by_role(
+                "button",
+                name=pattern,
+            )
+
             count = locator.count()
 
             for i in range(count):
-                candidate = locator.nth(i)
+                button = locator.nth(i)
 
-                if candidate.is_visible():
-                    return candidate
+                if visible(button):
+                    return button
         except Exception:
             continue
 
-    # Fallback: inspect buttons.
+    # Inspect all visible buttons.
     buttons = page.locator("button:visible")
 
     try:
         count = buttons.count()
-
-        for i in range(count):
-            button = buttons.nth(i)
-
-            try:
-                text = clean_text(button.inner_text()).lower()
-
-                if (
-                    "calculate" in text
-                    or "គណនា" in text
-                ):
-                    return button
-            except Exception:
-                continue
     except Exception:
-        pass
+        count = 0
+
+    for i in range(count):
+        button = buttons.nth(i)
+
+        try:
+            text = clean_text(
+                button.inner_text()
+            ).casefold()
+
+            if (
+                "calculate" in text
+                or "គណនា" in text
+            ):
+                return button
+        except Exception:
+            continue
+
+    # Some implementations use an input submit button.
+    submits = page.locator(
+        'input[type="submit"]:visible, '
+        'input[type="button"]:visible'
+    )
+
+    try:
+        count = submits.count()
+    except Exception:
+        count = 0
+
+    for i in range(count):
+        button = submits.nth(i)
+
+        try:
+            text = " ".join(
+                [
+                    button.get_attribute("value") or "",
+                    button.get_attribute("aria-label") or "",
+                ]
+            ).casefold()
+
+            if (
+                "calculate" in text
+                or "គណនា" in text
+            ):
+                return button
+        except Exception:
+            continue
 
     raise RuntimeError(
         "Could not find the Calculate button."
     )
 
 
-def get_page_text(page):
-    """Return the visible page text."""
-
-    try:
-        return clean_text(page.locator("body").inner_text())
-    except Exception:
-        return ""
-
-
 def wait_for_calculation(page):
     """
-    Wait for the Calculate request/result.
-
-    The page currently displays a Loading... element while the
-    calculation is being performed, so wait for it to disappear
-    when possible, then allow a short rendering period.
+    Wait for the calculation response.
     """
 
+    # Wait for Loading to appear/disappear if the site uses it.
     try:
         loading = page.get_by_text(
-            re.compile(r"Loading\.\.\.", re.I)
+            re.compile(
+                r"loading",
+                re.IGNORECASE,
+            )
         )
 
         if loading.count() > 0:
@@ -563,17 +785,99 @@ def wait_for_calculation(page):
     except Exception:
         pass
 
-    page.wait_for_timeout(1_500)
+    # Give the result component time to render.
+    page.wait_for_timeout(2_000)
 
 
-def has_error_message(page, body_text):
+# ---------------------------------------------------------------------
+# RESULT ANALYSIS
+# ---------------------------------------------------------------------
+
+def find_letter_service(page):
     """
-    Detect an error message after Calculate.
+    Find the Letter service/result.
 
-    We check both visible DOM elements and common error words.
+    Returns the most useful containing element text.
     """
 
-    error_patterns = [
+    # Search text nodes/elements containing Letter.
+    selectors = [
+        "text=Letter",
+        '[class*="letter" i]',
+        '[id*="letter" i]',
+        "tr",
+        "div",
+        "td",
+    ]
+
+    candidates = []
+
+    for selector in selectors:
+        locator = page.locator(selector)
+
+        try:
+            count = locator.count()
+        except Exception:
+            continue
+
+        for i in range(count):
+            element = locator.nth(i)
+
+            if not visible(element):
+                continue
+
+            try:
+                text = clean_text(
+                    element.inner_text()
+                )
+            except Exception:
+                continue
+
+            if not text:
+                continue
+
+            if "letter" in text.casefold():
+                candidates.append(
+                    (len(text), text)
+                )
+
+    if not candidates:
+        return ""
+
+    # Prefer the smallest useful container containing Letter.
+    candidates.sort(key=lambda x: x[0])
+
+    for length, text in candidates:
+        lowered = text.casefold()
+
+        if (
+            "price" in lowered
+            or "khr" in lowered
+            or "៛" in text
+            or re.search(r"\d", text)
+        ):
+            return text
+
+    return candidates[0][1]
+
+
+def detect_error(page):
+    """
+    Detect an actual result/error message.
+    """
+
+    error_selectors = [
+        '[role="alert"]:visible',
+        ".alert-danger:visible",
+        ".alert-warning:visible",
+        ".error:visible",
+        ".errors:visible",
+        ".invalid-feedback:visible",
+        ".text-danger:visible",
+        ".toast:visible",
+    ]
+
+    patterns = [
         r"\berror\b",
         r"something went wrong",
         r"failed",
@@ -588,303 +892,224 @@ def has_error_message(page, body_text):
         r"កំហុស",
     ]
 
-    # First inspect common error containers.
-    selectors = [
-        '[role="alert"]:visible',
-        '.alert-danger:visible',
-        '.alert-warning:visible',
-        '.error:visible',
-        '.errors:visible',
-        '.invalid-feedback:visible',
-        '.text-danger:visible',
-        '.toast:visible',
-    ]
-
-    for selector in selectors:
+    for selector in error_selectors:
         locator = page.locator(selector)
 
         try:
             count = locator.count()
-
-            for i in range(count):
-                item = locator.nth(i)
-
-                if not item.is_visible():
-                    continue
-
-                text = clean_text(item.inner_text())
-
-                if text:
-                    lowered = text.casefold()
-
-                    for pattern in error_patterns:
-                        if re.search(
-                            pattern,
-                            lowered,
-                            re.IGNORECASE,
-                        ):
-                            return True, text
         except Exception:
             continue
 
-    # Inspect the page text.
-    lowered_body = body_text.casefold()
+        for i in range(count):
+            element = locator.nth(i)
 
-    for pattern in error_patterns:
-        if re.search(
-            pattern,
-            lowered_body,
-            re.IGNORECASE,
-        ):
-            return True, pattern
+            if not visible(element):
+                continue
+
+            try:
+                text = clean_text(
+                    element.inner_text()
+                )
+            except Exception:
+                continue
+
+            if not text:
+                continue
+
+            for pattern in patterns:
+                if re.search(
+                    pattern,
+                    text,
+                    flags=re.IGNORECASE,
+                ):
+                    return True, text
 
     return False, ""
 
 
-def extract_letter_service_text(page, body_text):
+def letter_has_price(letter_text):
     """
-    Extract the text associated with the Letter service.
+    Check whether the Letter service contains Price (KHR).
 
-    The exact markup can change, so this searches the rendered page
-    rather than relying on one CSS class.
+    We require Letter to have a price-like KHR result and a numeric
+    value. A generic number somewhere else on the page is not enough.
     """
-
-    # First try elements whose text contains Letter.
-    letter_selectors = [
-        "text=Letter",
-        '[class*="letter" i]',
-        '[id*="letter" i]',
-    ]
-
-    for selector in letter_selectors:
-        try:
-            locator = page.locator(selector)
-
-            count = locator.count()
-
-            for i in range(count):
-                item = locator.nth(i)
-
-                if not item.is_visible():
-                    continue
-
-                text = clean_text(item.inner_text())
-
-                if "letter" not in text.casefold():
-                    continue
-
-                # The useful result is often contained in a parent card,
-                # table row, or service block.
-                for level in range(1, 5):
-                    try:
-                        parent = item.locator(
-                            "/.." * level
-                        )
-
-                        parent_text = clean_text(
-                            parent.inner_text()
-                        )
-
-                        if parent_text:
-                            if (
-                                "price" in parent_text.casefold()
-                                or "khr" in parent_text.casefold()
-                                or "letter" in parent_text.casefold()
-                            ):
-                                return parent_text
-                    except Exception:
-                        continue
-
-                return text
-        except Exception:
-            continue
-
-    # Fallback: extract a window around "Letter" from the page text.
-    match = re.search(
-        r"letter.{0,500}",
-        body_text,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-
-    if match:
-        return clean_text(match.group(0))
-
-    return ""
-
-
-def letter_has_price(page, body_text):
-    """
-    Determine whether the Letter service contains a Price (KHR).
-
-    We require both:
-      - Letter
-      - a Price/KHR value associated with Letter
-
-    This deliberately does NOT treat unrelated prices elsewhere
-    on the page as a valid Letter price.
-    """
-
-    letter_text = extract_letter_service_text(
-        page,
-        body_text,
-    )
 
     if not letter_text:
-        return False, ""
+        return False
 
     lowered = letter_text.casefold()
 
-    # The site may render the label as:
-    # Price (KHR)
-    # Price KHR
-    # KHR
-    # or a Khmer equivalent.
-    price_label_patterns = [
-        r"price\s*\(\s*khr\s*\)",
-        r"price\s+khr",
-        r"price",
-        r"khr",
-        r"៛",
-        r"រៀល",
-    ]
-
-    has_price = any(
-        re.search(
-            pattern,
-            lowered,
-            flags=re.IGNORECASE,
+    has_price_label = (
+        bool(
+            re.search(
+                r"price\s*\(\s*khr\s*\)",
+                lowered,
+                flags=re.IGNORECASE,
+            )
         )
-        for pattern in price_label_patterns
+        or bool(
+            re.search(
+                r"price\s+khr",
+                lowered,
+                flags=re.IGNORECASE,
+            )
+        )
+        or "price" in lowered
+        or "khr" in lowered
+        or "៛" in letter_text
+        or "រៀល" in letter_text
     )
 
-    if not has_price:
-        return False, letter_text
+    if not has_price_label:
+        return False
 
-    # A price should normally contain digits.
-    has_number = bool(
+    # There must be a numeric price.
+    return bool(
         re.search(
             r"\d[\d,.\s]*",
             letter_text,
         )
     )
 
-    if not has_number:
-        return False, letter_text
 
-    return True, letter_text
+def evaluate_result(page):
+    """
+    Apply the user's exact suspension rules:
 
+    1. Error message -> suspended.
+    2. Letter missing -> suspended.
+    3. Letter exists but Price (KHR) missing -> suspended.
+    4. Otherwise active.
+    """
+
+    error_found, error_text = detect_error(page)
+
+    if error_found:
+        return True, "error", error_text
+
+    letter_text = find_letter_service(page)
+
+    if not letter_text:
+        return (
+            True,
+            "letter_missing",
+            "",
+        )
+
+    if not letter_has_price(letter_text):
+        return (
+            True,
+            "letter_price_missing",
+            letter_text,
+        )
+
+    return (
+        False,
+        "active",
+        letter_text,
+    )
+
+
+# ---------------------------------------------------------------------
+# COUNTRY TEST
+# ---------------------------------------------------------------------
 
 def test_country(page, country):
     """
-    Test one country exactly in the requested order:
+    Follow the required order exactly:
 
-      1. Select country
-      2. Enter 0.02
-      3. Click Calculate
-      4. Inspect result
+    1) select a country
+    2) enter 0.02 kg
+    3) click Calculate
+    4) inspect the result
     """
 
+    print("")
+    print("----------------------------------------")
     print(f"Testing: {country}")
+    print("----------------------------------------")
 
+    # 1) Select country
     select_country(page, country)
 
-    # Step 2: weight
+    # 2) Enter 0.02
     set_weight(page)
 
-    # Step 3: Calculate
+    # 3) Click Calculate
     calculate_button = find_calculate_button(page)
+
+    print("Clicking Calculate...")
     calculate_button.click()
 
-    # Step 4: wait for and inspect result
+    # 4) Inspect result
     wait_for_calculation(page)
 
-    body_text = get_page_text(page)
+    suspended, reason, details = evaluate_result(page)
 
-    error_found, error_text = has_error_message(
-        page,
-        body_text,
-    )
-
-    if error_found:
+    if suspended:
         print(
-            f"  -> SUSPENDED (error: {error_text})"
+            f"SUSPENDED: {country} "
+            f"({reason})"
         )
-        return True, "error"
 
-    # If Letter is missing, destination is suspended.
-    letter_text = extract_letter_service_text(
-        page,
-        body_text,
-    )
+        if details:
+            print(
+                f"Result details: {details[:500]}"
+            )
 
-    if not letter_text:
-        print("  -> SUSPENDED (Letter service missing)")
-        return True, "letter_missing"
+        return True
 
-    # If Letter exists but has no Price (KHR), suspended.
-    price_found, service_text = letter_has_price(
-        page,
-        body_text,
-    )
+    print(f"ACTIVE: {country}")
 
-    if not price_found:
+    if details:
         print(
-            "  -> SUSPENDED "
-            "(Letter Price (KHR) missing)"
+            f"Letter result: {details[:500]}"
         )
-        print(f"     Letter result: {service_text}")
-        return True, "letter_price_missing"
 
-    print("  -> ACTIVE (Letter price found)")
-    return False, "active"
+    return False
 
+
+# ---------------------------------------------------------------------
+# OUTPUT
+# ---------------------------------------------------------------------
 
 def write_output(countries, suspended):
-    """Write the final monitoring file."""
+    """
+    Create output_cambodia.txt.
+    """
 
-    now = datetime.now(timezone.utc).strftime(
+    timestamp = datetime.now(
+        timezone.utc
+    ).strftime(
         "%Y-%m-%d %H:%M:%S UTC"
     )
 
-    lines = []
+    lines = [
+        "Cambodia Post International Shipping Monitor",
+        f"Checked: {timestamp}",
+        f"Website: {URL}",
+        f"Weight tested: {WEIGHT} kg",
+        "",
+        "LIST 1 - ALL COUNTRIES",
+        f"Total countries: {len(countries)}",
+        "",
+    ]
 
-    lines.append(
-        "Cambodia Post International Shipping Monitor"
-    )
-    lines.append(
-        f"Checked: {now}"
-    )
-    lines.append(
-        f"Website: {URL}"
-    )
-    lines.append(
-        f"Weight tested: {WEIGHT} kg"
-    )
-    lines.append("")
+    lines.extend(countries)
 
-    lines.append(
-        "LIST 1 - ALL COUNTRIES"
+    lines.extend(
+        [
+            "",
+            "LIST 2 - SUSPENDED DESTINATIONS",
+            f"Total suspended destinations: "
+            f"{len(suspended)}",
+            "",
+        ]
     )
-    lines.append(
-        f"Total countries: {len(countries)}"
-    )
-    lines.append("")
-
-    for country in countries:
-        lines.append(country)
-
-    lines.append("")
-    lines.append(
-        "LIST 2 - SUSPENDED DESTINATIONS"
-    )
-    lines.append(
-        f"Total suspended destinations: {len(suspended)}"
-    )
-    lines.append("")
 
     if suspended:
-        for country in suspended:
-            lines.append(country)
+        lines.extend(suspended)
     else:
         lines.append("None")
 
@@ -896,11 +1121,17 @@ def write_output(countries, suspended):
     )
 
 
+# ---------------------------------------------------------------------
+# MAIN
+# ---------------------------------------------------------------------
+
 def main():
     print("Starting Cambodia Post monitor...")
     print(f"URL: {URL}")
+    print(f"Weight: {WEIGHT} kg")
 
     with sync_playwright() as playwright:
+
         browser = playwright.chromium.launch(
             headless=True,
             args=[
@@ -920,40 +1151,55 @@ def main():
 
         page = context.new_page()
 
-        page.set_default_timeout(PAGE_TIMEOUT)
+        page.set_default_timeout(
+            PAGE_TIMEOUT
+        )
 
         try:
+            print("")
             print("Opening Cambodia Post...")
+
             page.goto(
                 URL,
                 wait_until="domcontentloaded",
                 timeout=PAGE_TIMEOUT,
             )
 
-            page.wait_for_timeout(3_000)
+            page.wait_for_timeout(4_000)
 
-            # LIST 1
+            print("")
             print("Discovering countries...")
+
             countries = discover_countries(page)
 
-            # LIST 2
-            suspended = []
-
+            print("")
+            print("========================================")
             print(
-                f"Testing {len(countries)} countries..."
+                f"TOTAL COUNTRIES FOUND: {len(countries)}"
             )
+            print("========================================")
+
+            for country in countries:
+                print(country)
+
+            print("")
+            print(
+                "Beginning destination testing..."
+            )
+
+            suspended = []
 
             for index, country in enumerate(
                 countries,
                 start=1,
             ):
+                print("")
                 print(
-                    f"[{index}/{len(countries)}] "
-                    f"{country}"
+                    f"[{index}/{len(countries)}]"
                 )
 
                 try:
-                    is_suspended, reason = test_country(
+                    is_suspended = test_country(
                         page,
                         country,
                     )
@@ -962,25 +1208,31 @@ def main():
                         suspended.append(country)
 
                 except Exception as exc:
-                    # A technical failure is NOT automatically treated
-                    # as a postal suspension. We record it loudly and
-                    # continue with the next country.
+                    print("")
                     print(
-                        f"  -> ERROR testing {country}: "
-                        f"{exc}"
+                        f"TECHNICAL ERROR testing "
+                        f"{country}: {exc}"
                     )
 
-                    # Reload the calculator before continuing.
+                    # Do NOT classify a technical failure as
+                    # suspended. Reload the calculator and continue.
                     try:
+                        print(
+                            "Reloading Cambodia Post "
+                            "calculator..."
+                        )
+
                         page.goto(
                             URL,
                             wait_until="domcontentloaded",
                             timeout=PAGE_TIMEOUT,
                         )
-                        page.wait_for_timeout(2_000)
+
+                        page.wait_for_timeout(3_000)
+
                     except Exception as reload_exc:
                         print(
-                            f"  -> Reload failed: "
+                            f"Reload failed: "
                             f"{reload_exc}"
                         )
 
@@ -1003,6 +1255,16 @@ def main():
             print(
                 f"Output file: {OUTPUT_FILE}"
             )
+            print("========================================")
+
+        except Exception:
+            # Save diagnostics for failures occurring before
+            # country testing begins.
+            save_diagnostics(
+                page,
+                "Fatal monitor error",
+            )
+            raise
 
         finally:
             context.close()

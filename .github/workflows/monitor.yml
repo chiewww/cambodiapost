@@ -3,8 +3,6 @@ name: Monitor Cambodia Post
 on:
   schedule:
     # Runs every day at 08:00 UTC.
-    #
-    # Change this if you want a different time.
     - cron: "0 8 * * *"
 
   workflow_dispatch:
@@ -41,7 +39,7 @@ jobs:
 
       - name: Run Cambodia Post monitor
         run: |
-          python monitor_combodia.py
+          python monitor_cambodia.py
 
       - name: Show generated output
         run: |

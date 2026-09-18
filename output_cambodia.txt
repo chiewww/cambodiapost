@@ -1,9 +1,9 @@
 CAMBODIA POST INTERNATIONAL SHIPPING MONITOR
-Last checked: 2026-09-18 01:21:03 UTC
+Last checked: 2026-09-18 12:46:34 UTC
 Weight tested: 0.02 kg
 
 ============================================================
-COUNTRY LIST (189 countries)
+COUNTRY LIST (190 countries)
 ============================================================
 1. អេមីរ៉ាត​អារ៉ាប់​រួម — United Arab Emirates — SUSPENDED
 2. អាហ្វហ្កានីស្ថាន — Afghanistan — SUSPENDED
@@ -194,6 +194,7 @@ COUNTRY LIST (189 countries)
 187. ស៊ីមបាវ៉េ — Zimbabwe
 188. កូតឌីវ័រ — Côte d’Ivoire
 189. សែប៊ី — Serbia
+190. ទីម័រលេស្តេ — Timor-Leste
 
 ============================================================
 SUSPENDED DESTINATIONS (78)

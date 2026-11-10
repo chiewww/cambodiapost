@@ -2,10 +2,10 @@
 """
 Cambodia Post international letter checker.
 
+- Reads every destination from https://www.cambodiapost.com.kh/select2/getAllCountries
 - Opens https://www.cambodiapost.com.kh/calculate/international (English)
-- Reads every destination from the country dropdown
-- Enters weight 0.02 kg for each, clicks Calculate
-- "Letter" service present  -> available (price + estimated delivery time)
+- Enters weight 0.02 kg for each destination, clicks Calculate
+- "Letter" service present   -> available (price + estimated delivery time)
 - No "Letter" / "Oops" popup -> suspended
 - Destinations in the Postcrossing master list but missing from Cambodia Post
   are listed separately (Postcrossing order)
@@ -23,6 +23,7 @@ from playwright.sync_api import sync_playwright
 BASE = "https://www.cambodiapost.com.kh"
 LANG_EN_URL = BASE + "/lang/en"
 PAGE_URL = BASE + "/calculate/international"
+COUNTRIES_URL = BASE + "/select2/getAllCountries"
 WEIGHT = "0.02"
 OUTPUT_FILE = "output_cambodia.txt"
 MAX_ERROR_RATIO = 0.05  # if more than 5% of countries error out, keep old file
@@ -281,6 +282,34 @@ PC_RAW = """
 248|Zimbabwe
 """
 
+# ISO 3166 two-letter codes for each Postcrossing number (used as a fallback,
+# because Cambodia Post names contain spelling variations / typos).
+ISO_RAW = (
+    "1 AF,2 AX,3 AL,4 DZ,5 AS,6 AD,7 AO,8 AI,9 AQ,10 AG,11 AR,12 AM,13 AW,14 AU,"
+    "15 AT,16 AZ,17 BS,18 BH,19 BD,20 BB,21 BY,22 BE,23 BZ,24 BJ,25 BM,26 BT,"
+    "27 BO,28 BQ,29 BA,30 BW,31 BR,32 IO,33 BN,34 BG,35 BF,36 BI,37 CV,38 KH,"
+    "39 CM,40 CA,41 KY,42 CF,43 TD,44 CL,45 CN,46 CX,47 CC,48 CO,49 KM,50 CG,"
+    "51 CD,52 CK,53 CR,54 CI,55 HR,56 CU,57 CW,58 CY,59 CZ,60 DK,61 DJ,62 DM,"
+    "63 DO,64 EC,65 EG,66 SV,67 GQ,68 ER,69 EE,70 SZ,71 ET,72 FK,73 FO,74 FJ,"
+    "75 FI,76 FR,77 GF,78 PF,79 TF,80 GA,81 GM,82 GE,83 DE,84 GH,85 GI,86 GR,"
+    "87 GL,88 GD,89 GP,90 GU,91 GT,92 GG,93 GN,94 GW,95 GY,96 HT,97 HN,98 HK,"
+    "99 HU,100 IS,101 IN,102 ID,103 IR,104 IQ,105 IE,106 IM,107 IL,108 IT,"
+    "109 JM,110 JP,111 JE,112 JO,113 KZ,114 KE,115 KI,116 KP,117 KR,118 XK,"
+    "119 KW,120 KG,121 LA,122 LV,123 LB,124 LS,125 LR,126 LY,127 LI,128 LT,"
+    "129 LU,130 MO,131 MG,132 MW,133 MY,134 MV,135 ML,136 MT,137 MH,138 MQ,"
+    "139 MR,140 MU,141 YT,142 MX,143 FM,144 MD,145 MC,146 MN,147 ME,148 MS,"
+    "149 MA,150 MZ,151 MM,152 NA,153 NR,154 NP,155 NL,156 NC,157 NZ,158 NI,"
+    "159 NE,160 NG,161 NU,162 NF,163 MP,164 MK,165 NO,166 OM,167 PK,168 PW,"
+    "169 PS,170 PA,171 PG,172 PY,173 PE,174 PH,175 PN,176 PL,177 PT,178 PR,"
+    "179 QA,180 RE,181 RO,182 RU,183 RW,184 BL,185 SH,186 KN,187 LC,188 MF,"
+    "189 PM,190 VC,191 WS,192 SM,193 ST,194 SA,195 SN,196 RS,197 SC,198 SL,"
+    "199 SG,200 SX,201 SK,202 SI,203 SB,204 SO,205 ZA,206 GS,207 SS,208 ES,"
+    "209 LK,210 SD,211 SR,212 SJ,213 SE,214 CH,215 SY,216 TW,217 TJ,218 TZ,"
+    "219 TH,220 TL,221 TG,222 TK,223 TO,224 TT,225 TN,226 TR,227 TM,228 TC,"
+    "229 TV,230 UG,231 UA,232 AE,233 GB,234 UY,235 US,236 UM,237 UZ,238 VU,"
+    "239 VA,240 VE,241 VN,242 VG,243 VI,244 WF,245 EH,246 YE,247 ZM,248 ZW"
+)
+
 # Extra spellings Cambodia Post might use  ->  Postcrossing number
 ALIASES = {
     "united states": 235, "united states of america": 235, "usa": 235, "us": 235,
@@ -355,6 +384,7 @@ def norm(s: str) -> str:
 
 PC_NAME = {}      # number -> display name
 PC_BY_NORM = {}   # normalised name -> number
+PC_BY_ISO = {}    # ISO2 code -> number
 for line in PC_RAW.strip().splitlines():
     num_s, name = line.split("|", 1)
     num = int(num_s)
@@ -363,21 +393,89 @@ for line in PC_RAW.strip().splitlines():
         PC_BY_NORM[norm(part)] = num
 for k, v in ALIASES.items():
     PC_BY_NORM.setdefault(norm(k), v)
+for pair in ISO_RAW.split(","):
+    n_s, code = pair.strip().split(" ")
+    PC_BY_ISO[code] = int(n_s)
 
 
-def find_pc_number(name: str):
+def find_pc_number(name: str, code: str = ""):
     n = norm(name)
-    if n in PC_BY_NORM:
-        return PC_BY_NORM[n]
-    # also try without text in parentheses
-    n2 = norm(re.sub(r"\(.*?\)", "", name))
-    if n2 in PC_BY_NORM:
-        return PC_BY_NORM[n2]
-    close = difflib.get_close_matches(n, PC_BY_NORM.keys(), n=1, cutoff=0.9)
+    by_name = PC_BY_NORM.get(n)
+    if by_name is None:
+        n2 = norm(re.sub(r"\(.*?\)", "", name))
+        by_name = PC_BY_NORM.get(n2)
+    by_code = PC_BY_ISO.get((code or "").upper())
+
+    if by_name is not None:
+        if by_code is not None and by_code != by_name:
+            print(f"  [note] '{name}' ({code}): name->{by_name} but code->{by_code}; "
+                  f"using name", file=sys.stderr)
+        return by_name
+    if by_code is not None:
+        print(f"  [code match] '{name}' ({code}) -> {by_code}", file=sys.stderr)
+        return by_code
+    close = difflib.get_close_matches(n, PC_BY_NORM.keys(), n=1, cutoff=0.85)
     if close:
         print(f"  [fuzzy] '{name}' -> '{close[0]}'", file=sys.stderr)
         return PC_BY_NORM[close[0]]
     return None
+
+
+def pretty_name(upper_name: str) -> str:
+    s = upper_name.strip().title()
+    for a, b in ((" And ", " and "), (" Of ", " of "), (" The ", " the "),
+                 ("'S", "'s"), (" De ", " de "), (" Da ", " da ")):
+        s = s.replace(a, b)
+    return s
+
+
+# --------------------------------------------------------------------------
+# Destination list from the select2 JSON endpoint
+# --------------------------------------------------------------------------
+def fetch_countries(page):
+    items, seen = [], set()
+    p, last_page = 1, 1
+    while p <= last_page:
+        data = None
+        for attempt in range(3):
+            try:
+                r = page.request.get(
+                    COUNTRIES_URL,
+                    params={"page": p},
+                    headers={"Accept": "application/json",
+                             "X-Requested-With": "XMLHttpRequest"},
+                    timeout=30000,
+                )
+                if r.ok:
+                    data = r.json()
+                    break
+                print(f"  page {p}: HTTP {r.status}", file=sys.stderr)
+            except Exception as e:
+                print(f"  page {p} attempt {attempt + 1} failed: {e}", file=sys.stderr)
+            time.sleep(2)
+        if data is None:
+            raise RuntimeError(f"could not fetch country list page {p}")
+        last_page = int(data.get("last_page", 1))
+        for d in data.get("data", []):
+            cid = d.get("id")
+            text = (d.get("text") or "").strip()
+            if cid is None or not text or cid in seen:
+                continue
+            seen.add(cid)
+            m = re.match(r"^\s*([A-Za-z0-9]{2,3})\s*\((.*)\)\s*$", text)
+            if m:
+                code, raw_name = m.group(1).upper(), m.group(2)
+            else:
+                code, raw_name = "", text
+            items.append({
+                "id": cid,
+                "text": text,
+                "code": code,
+                "name": pretty_name(raw_name),
+                "raw_name": raw_name,
+            })
+        p += 1
+    return items
 
 
 # --------------------------------------------------------------------------
@@ -426,39 +524,42 @@ def dismiss_popups(page):
         pass
 
 
-def find_country_select(page):
-    """Return index of the <select> with the most options."""
-    best_idx, best_n = None, 0
-    sel = page.locator("select")
-    for i in range(sel.count()):
-        n = sel.nth(i).locator("option").count()
-        if n > best_n:
-            best_idx, best_n = i, n
-    return best_idx
+def get_country_select(page):
+    sel = page.locator("select.select2-hidden-accessible")
+    if sel.count():
+        return sel.first
+    return page.locator("select").first
 
 
-def read_options(page, idx):
-    opts = page.locator("select").nth(idx).locator("option")
-    out = []
-    for i in range(opts.count()):
-        val = opts.nth(i).get_attribute("value")
-        txt = (opts.nth(i).inner_text() or "").strip()
-        if val is None or val.strip() == "" or not txt:
-            continue
-        out.append((val, txt))
-    return out
-
-
-def set_country(page, idx, value):
-    page.locator("select").nth(idx).evaluate(
-        """(el, val) => {
-            el.value = val;
-            if (window.jQuery) { window.jQuery(el).val(val).trigger('change'); }
-            el.dispatchEvent(new Event('input', {bubbles: true}));
+def set_country_inject(page, item):
+    """Put the country into the (select2 / AJAX) <select> directly."""
+    sel = get_country_select(page)
+    sel.evaluate(
+        """(el, a) => {
+            el.innerHTML = '';
+            const opt = new Option(a.text, String(a.id), true, true);
+            el.appendChild(opt);
+            el.value = String(a.id);
+            if (window.jQuery) {
+                window.jQuery(el).trigger('change');
+                window.jQuery(el).trigger({type: 'select2:select',
+                                           params: {data: {id: a.id, text: a.text}}});
+            }
             el.dispatchEvent(new Event('change', {bubbles: true}));
         }""",
-        value,
+        {"id": item["id"], "text": item["text"]},
     )
+
+
+def set_country_ui(page, item):
+    """Fallback: open the select2 box, type the name, click the result."""
+    box = page.locator(".select2-selection, .select2-container").first
+    box.click()
+    search = page.locator("input.select2-search__field").first
+    search.fill(item["raw_name"])
+    opt = page.locator(".select2-results__option", has_text=item["text"]).first
+    opt.wait_for(state="visible", timeout=8000)
+    opt.click()
 
 
 def find_weight_input(page):
@@ -494,7 +595,7 @@ def click_calculate(page):
 def load_form(page):
     page.goto(PAGE_URL, wait_until="domcontentloaded", timeout=60000)
     page.wait_for_selector("select", state="attached", timeout=30000)
-    time.sleep(0.5)
+    time.sleep(0.8)
 
 
 def parse_price(cells):
@@ -514,10 +615,14 @@ def parse_estimate(cells):
     return None
 
 
-def check_country(page, idx, value):
-    """Returns dict: status in {available, suspended, error}"""
+def check_country(page, item, attempt):
+    """Returns dict: status in {available, suspended, noresult}"""
     load_form(page)
-    set_country(page, idx, value)
+    if attempt == 1:
+        set_country_ui(page, item)
+    else:
+        set_country_inject(page, item)
+
     w = find_weight_input(page)
     if w is None:
         raise RuntimeError("weight input not found")
@@ -526,7 +631,7 @@ def check_country(page, idx, value):
         raise RuntimeError("Calculate button not found")
 
     deadline = time.time() + 12
-    rows, svc_rows, oops = [], [], False
+    svc_rows, oops = [], False
     while time.time() < deadline:
         if oops_visible(page):
             oops = True
@@ -542,7 +647,7 @@ def check_country(page, idx, value):
 
     if oops:
         dismiss_popups(page)
-        return {"status": "suspended", "reason": 'Oops" pop up window showed up'}
+        return {"status": "suspended", "reason": '"Oops" Pop up window showed up'}
 
     if not svc_rows:
         return {"status": "noresult"}
@@ -577,7 +682,7 @@ def check_country(page, idx, value):
 # Main
 # --------------------------------------------------------------------------
 def main():
-    results = []  # (cp_name, pc_number or None, result dict)
+    results = []  # (item, pc_number or None, result dict)
     errors = []
 
     with sync_playwright() as p:
@@ -591,64 +696,63 @@ def main():
         page = context.new_page()
         page.set_default_timeout(20000)
 
-        # Switch site language to English (stored in the session/cookie)
+        # Switch site language to English (stored in session / cookie)
         try:
             page.goto(LANG_EN_URL, wait_until="domcontentloaded", timeout=60000)
         except Exception as e:
             print(f"Language switch warning: {e}", file=sys.stderr)
 
+        # Load the form once so we get session cookies for the JSON endpoint
         load_form(page)
-        idx = find_country_select(page)
-        if idx is None:
-            print("ERROR: country dropdown not found", file=sys.stderr)
+
+        try:
+            items = fetch_countries(page)
+        except Exception as e:
+            print(f"ERROR: {e}", file=sys.stderr)
             sys.exit(1)
-        options = read_options(page, idx)
-        if not options:
+        if not items:
             print("ERROR: no destinations found", file=sys.stderr)
             sys.exit(1)
 
-        latin = sum(1 for _, t in options if re.search(r"[A-Za-z]", t))
-        if latin < len(options) * 0.8:
-            print("WARNING: destination names do not look English; "
-                  "language switch may have failed.", file=sys.stderr)
-
-        print(f"Found {len(options)} destinations.")
+        print(f"Found {len(items)} destinations.")
         debug_left = 3
 
-        for n, (val, name) in enumerate(options, 1):
+        for n, item in enumerate(items, 1):
             res = None
             for attempt in range(3):
                 try:
-                    res = check_country(page, idx, val)
-                    if res["status"] == "noresult":
+                    r = check_country(page, item, attempt)
+                    if r["status"] == "noresult":
                         if debug_left > 0 and attempt == 2:
                             debug_left -= 1
                             try:
                                 body = page.inner_text("body")[:1500]
                             except Exception:
                                 body = ""
-                            print(f"[debug] no result for {name}:\n{body}\n", file=sys.stderr)
-                        res = None
+                            print(f"[debug] no result for {item['name']}:\n{body}\n",
+                                  file=sys.stderr)
                         time.sleep(1)
                         continue
+                    res = r
                     break
                 except Exception as e:
-                    print(f"  attempt {attempt + 1} failed for {name}: {e}", file=sys.stderr)
-                    res = None
+                    print(f"  attempt {attempt + 1} failed for {item['name']}: {e}",
+                          file=sys.stderr)
                     time.sleep(2)
+
+            pc = find_pc_number(item["raw_name"], item["code"])
             if res is None:
-                errors.append(name)
-                results.append((name, find_pc_number(name),
-                                {"status": "error"}))
-                print(f"[{n}/{len(options)}] {name}: ERROR")
+                errors.append(item["name"])
+                results.append((item, pc, {"status": "error"}))
+                print(f"[{n}/{len(items)}] {item['name']}: ERROR")
             else:
-                results.append((name, find_pc_number(name), res))
-                print(f"[{n}/{len(options)}] {name}: {res['status']}")
+                results.append((item, pc, res))
+                print(f"[{n}/{len(items)}] {item['name']}: {res['status']}")
             time.sleep(0.3)
 
         browser.close()
 
-    if len(errors) > len(options) * MAX_ERROR_RATIO:
+    if len(errors) > len(items) * MAX_ERROR_RATIO:
         print(f"Too many errors ({len(errors)}). Keeping the old output file.",
               file=sys.stderr)
         sys.exit(1)
@@ -659,7 +763,8 @@ def main():
 
     available, suspended, unchecked, unmatched = [], [], [], []
     seen_pc = set()
-    for name, num, res in results:
+    for item, num, res in results:
+        name = item["name"]
         if num is not None:
             seen_pc.add(num)
         else:
@@ -667,18 +772,9 @@ def main():
         if res["status"] == "available":
             available.append(f"{label(num)}. {name} {res['price']} {res['est']}")
         elif res["status"] == "suspended":
-            suspended.append(f'{label(num)}. {name} ("{res["reason"]})'
-                             if res["reason"].startswith('Oops')
-                             else f'{label(num)}. {name} ({res["reason"]})')
+            suspended.append(f"{label(num)}. {name} ({res['reason']})")
         else:
             unchecked.append(f"{label(num)}. {name}")
-
-    # fix Oops formatting: show as ("Oops" Pop up window showed up)
-    suspended = [s.replace('("Oops" pop up', '("Oops" Pop up')
-                  .replace('(Oops" pop up', '("Oops" Pop up')
-                  .replace('"Oops" pop up', '"Oops" Pop up') for s in suspended]
-    suspended = [re.sub(r'\(Oops" Pop up window showed up\)',
-                        '("Oops" Pop up window showed up)', s) for s in suspended]
 
     missing = [f"{num}. {PC_NAME[num]}" for num in sorted(PC_NAME) if num not in seen_pc]
 

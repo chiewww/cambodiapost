@@ -1,6 +1,6 @@
 CAMBODIA POST - INTERNATIONAL LETTER SERVICE (weight 0.02 kg)
 Destinations on Cambodia Post list: 190
-Available: 64 | Suspended: 125 | Missing from Cambodia Post list: 58
+Available: 66 | Suspended: 123 | Missing from Cambodia Post list: 58
 
 === AVAILABLE DESTINATIONS (Cambodia Post order) ===
 12. Armenia 2,100 ៛ 17 to 24 days
@@ -8,6 +8,7 @@ Available: 64 | Suspended: 125 | Missing from Cambodia Post list: 58
 14. Australia 3,600 ៛ 18 to 25 days
 19. Bangladesh 2,400 ៛ 16 to 23 days
 22. Belgium 2,600 ៛ 15 to 22 days
+33. Brunei Darussalam 2,000 ៛ 16 to 23 days
 40. Canada 4,000 ៛ 15 to 22 days
 214. Switzerland 2,400 ៛ 13 to 20 days
 45. China 2,300 ៛ 12 to 19 days
@@ -38,6 +39,7 @@ Available: 64 | Suspended: 125 | Missing from Cambodia Post list: 58
 113. Kazakhstan 2,600 ៛ 24 to 31 days
 123. Lebanon 2,300 ៛ 20 to 28 days
 209. Sri​Lanka 2,100 ៛ 14 to 21 days
+151. Myanmar 2,300 ៛ 16 to 23 days
 134. Maldives 2,200 ៛ 19 to 26 days
 133. Malaysia 1,700 ៛ 12 to 19 days
 150. Mozambique 2,700 ៛ 19 to 26 days
@@ -83,7 +85,6 @@ Available: 64 | Suspended: 125 | Missing from Cambodia Post list: 58
 18. Bahrain ("Oops" Pop up window showed up)
 36. Burundi ("Oops" Pop up window showed up)
 24. Benin ("Oops" Pop up window showed up)
-33. Brunei Darussalam ("Oops" Pop up window showed up)
 27. Belivia ("Oops" Pop up window showed up)
 17. Bahamas ("Oops" Pop up window showed up)
 26. Bhutan ("Oops" Pop up window showed up)
@@ -141,7 +142,6 @@ Available: 64 | Suspended: 125 | Missing from Cambodia Post list: 58
 131. Madagascar ("Oops" Pop up window showed up)
 164. Macedonia ("Oops" Pop up window showed up)
 135. Mali ("Oops" Pop up window showed up)
-151. Myanmar ("Oops" Pop up window showed up)
 146. Mongolia ("Oops" Pop up window showed up)
 130. Macao ("Oops" Pop up window showed up)
 139. Mauritania ("Oops" Pop up window showed up)
